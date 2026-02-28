@@ -1,0 +1,112 @@
+:root {
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: #f4f4f5;
+  background: radial-gradient(circle at 25% 15%, #0b3053 0%, #081425 48%, #04070f 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.25rem);
+  letter-spacing: 0.02em;
+}
+
+.subtitle {
+  margin-top: 0.5rem;
+  opacity: 0.85;
+}
+
+.panel {
+  margin-top: 1.5rem;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 320px);
+  align-items: center;
+}
+
+svg {
+  width: min(100%, 460px);
+  filter: drop-shadow(0 10px 25px rgba(0, 0, 0, 0.35));
+}
+
+rect {
+  fill: #0e1527;
+  stroke: #6b7a95;
+  stroke-width: 3;
+  transition: fill 360ms ease, stroke 360ms ease, transform 360ms ease;
+  transform-origin: center;
+}
+
+rect.filled {
+  fill: #15b8a6;
+  stroke: #7cf0e5;
+}
+
+rect.focused {
+  stroke: #ffd166;
+  transform: scale(0.98);
+}
+
+.cell-label {
+  fill: #e4ecff;
+  font-size: 18px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.status {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 14px;
+  padding: 1rem;
+  background: rgba(7, 14, 27, 0.72);
+  line-height: 1.45;
+}
+
+.status p {
+  margin: 0.35rem 0;
+}
+
+.controls {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 1px solid #8fa6ca;
+  background: linear-gradient(180deg, #20395f 0%, #14233f 100%);
+  color: #eff6ff;
+  border-radius: 999px;
+  padding: 0.48rem 1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: #d4e0fb;
+}
+
+@media (max-width: 760px) {
+  .panel {
+    grid-template-columns: 1fr;
+  }
+
+  svg {
+    margin: 0 auto;
+  }
+}
