@@ -1,0 +1,17 @@
+{
+  "extends": "./2x2table/tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["src/lib/*"]
+    }
+  },
+  "include": [
+    "global.d.ts",
+    "2x2table/src/**/*.d.ts",
+    "2x2table/src/**/*.ts",
+    "2x2table/src/**/*.svelte",
+    "src/lib/**/*.ts",
+    "src/lib/**/*.svelte"
+  ]
+}

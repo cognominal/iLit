@@ -95,3 +95,36 @@ body {
 .dlx-button:hover {
   background: var(--dlx-button-hover-bg);
 }
+
+.scene-svg {
+  width: 100%;
+  max-width: 360px;
+  margin-top: 0.6rem;
+}
+
+.scene-svg .scene-bg {
+  fill: #080808;
+  stroke: var(--dlx-grid-border);
+  stroke-width: 1;
+}
+
+.scene-svg .scene-title {
+  fill: var(--dlx-text);
+  font-family: var(--dlx-font-ui);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.scene-svg .scene-row {
+  fill: #101010;
+}
+
+.scene-svg .scene-row.scene-active {
+  fill: var(--dlx-row-active);
+}
+
+.scene-svg .scene-row-text {
+  fill: var(--dlx-text);
+  font-family: var(--dlx-font-ui);
+  font-size: 12px;
+}

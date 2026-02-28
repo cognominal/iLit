@@ -5,16 +5,35 @@
     buildRowMap,
     hasOne,
     twoByTwoColumns,
-    twoByTwoPreviewSteps,
     twoByTwoRows,
     type Cell,
     type Column,
   } from '@shared/dlx';
+  import { Create, Rect, Scene } from '@shared/manim';
   import MatrixTableSvg from '@shared/renderers/svg/MatrixTableSvg.svelte';
+  import SceneSvg from '@shared/renderers/svg/SceneSvg.svelte';
 
   const boardCells: Cell[] = ['c00', 'c01', 'c10', 'c11'];
 
   const rowByName = buildRowMap(twoByTwoRows);
+
+  const previewScene = new Scene();
+  previewScene.wait(1, {
+    label: 'Idle',
+    note: 'Preview phase: rows are shown one by one.',
+  });
+
+  for (const row of twoByTwoRows) {
+    const rowNode = new Rect(`row-${row.name}`, 1, 1);
+    previewScene.play(Create(rowNode), {
+      meta: {
+        label: `Preview ${row.name}`,
+        rowName: row.name,
+        note: `Active row ${row.name}: ${row.piece} + ${row.cells.join(', ')}`,
+      },
+    });
+  }
+
   const isTestMode =
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('test') === '1';
@@ -23,9 +42,13 @@
   let isPlaying = $state(!isTestMode);
   const tickMs = 850;
 
-  const currentStep = $derived(twoByTwoPreviewSteps[stepIndex]);
+  const currentStep = $derived(previewScene.timeline[stepIndex]);
+  const currentStepLabel = $derived(currentStep?.meta?.label ?? 'Step');
+  const currentStepNote = $derived(currentStep?.meta?.note ?? '');
+  const activeRowName = $derived(currentStep?.meta?.rowName);
+
   const activeRow = $derived(
-    currentStep.rowName ? rowByName.get(currentStep.rowName) : undefined,
+    activeRowName ? rowByName.get(activeRowName) : undefined,
   );
 
   const activeColumns = $derived.by(() => activeColumnsFromRow(activeRow));
@@ -36,12 +59,12 @@
   }
 
   function nextStep(): void {
-    stepIndex = (stepIndex + 1) % twoByTwoPreviewSteps.length;
+    stepIndex = (stepIndex + 1) % previewScene.timeline.length;
   }
 
   function previousStep(): void {
     stepIndex =
-      (stepIndex - 1 + twoByTwoPreviewSteps.length) % twoByTwoPreviewSteps.length;
+      (stepIndex - 1 + previewScene.timeline.length) % previewScene.timeline.length;
   }
 
   function reset(): void {
@@ -69,14 +92,16 @@
         rows={twoByTwoRows}
         {hasOne}
         isColumnActive={isColumnActive}
-        isRowActive={(rowName) => currentStep.rowName === rowName}
+        isRowActive={(rowName) => activeRowName === rowName}
       />
     </div>
 
     <aside class="status-panel">
-      <p class="step" data-testid="step-label"><strong>{currentStep.label}</strong></p>
-      <p data-testid="step-note">{currentStep.note}</p>
+      <p class="step" data-testid="step-label"><strong>{currentStepLabel}</strong></p>
+      <p data-testid="step-note">{currentStepNote}</p>
       <p>Phase: row preview</p>
+
+      <SceneSvg scene={previewScene} currentIndex={stepIndex} />
 
       <svg
         class="dlx-board"

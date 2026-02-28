@@ -12,6 +12,23 @@ export type Animation = {
   toId?: string;
 };
 
+export type SceneStepMeta = {
+  label?: string;
+  note?: string;
+  rowName?: string;
+};
+
+export type PlayOptions = {
+  runTime?: number;
+  meta?: SceneStepMeta;
+};
+
+export type TimelineEntry = {
+  animations: Animation[];
+  runTime: number;
+  meta?: SceneStepMeta;
+};
+
 class BaseNode {
   readonly id: string;
   readonly kind: NodeKind;
@@ -89,14 +106,19 @@ export class VGroup extends BaseNode {
 }
 
 export class Scene {
-  timeline: { animations: Animation[]; runTime: number }[] = [];
+  timeline: TimelineEntry[] = [];
 
-  play(...animations: Animation[]): void {
-    this.timeline.push({ animations, runTime: 1 });
+  play(animations: Animation | Animation[], options: PlayOptions = {}): void {
+    const sequence = Array.isArray(animations) ? animations : [animations];
+    this.timeline.push({
+      animations: sequence,
+      runTime: options.runTime ?? 1,
+      meta: options.meta,
+    });
   }
 
-  wait(seconds = 1): void {
-    this.timeline.push({ animations: [], runTime: seconds });
+  wait(seconds = 1, meta?: SceneStepMeta): void {
+    this.timeline.push({ animations: [], runTime: seconds, meta });
   }
 }
 
