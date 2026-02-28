@@ -14,9 +14,12 @@
   const boardCells: Cell[] = ['c00', 'c01', 'c10', 'c11'];
 
   const rowByName = buildRowMap(twoByTwoRows);
+  const isTestMode =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('test') === '1';
 
   let stepIndex = $state(0);
-  let isPlaying = $state(true);
+  let isPlaying = $state(!isTestMode);
   const tickMs = 850;
 
   const currentStep = $derived(twoByTwoPreviewSteps[stepIndex]);
@@ -60,18 +63,26 @@
 
   <section class="layout">
     <div class="table-wrap" role="region" aria-label="Exact cover matrix">
-      <table class="dlx-table">
+      <table class="dlx-table" data-testid="matrix-table">
         <thead>
           <tr>
             <th class="row-col">row</th>
             {#each twoByTwoColumns as column}
-              <th class:active-col={isColumnActive(column)}>{column}</th>
+              <th
+                class:active-col={isColumnActive(column)}
+                data-testid={`header-${column}`}
+              >
+                {column}
+              </th>
             {/each}
           </tr>
         </thead>
         <tbody>
           {#each twoByTwoRows as row}
-            <tr class:active-row={currentStep.rowName === row.name}>
+            <tr
+              class:active-row={currentStep.rowName === row.name}
+              data-testid={`row-${row.name}`}
+            >
               <td class="row-name">{row.name}</td>
               {#each twoByTwoColumns as column}
                 <td class:active-col={isColumnActive(column)}>
@@ -85,11 +96,16 @@
     </div>
 
     <aside class="status-panel">
-      <p class="step"><strong>{currentStep.label}</strong></p>
-      <p>{currentStep.note}</p>
+      <p class="step" data-testid="step-label"><strong>{currentStep.label}</strong></p>
+      <p data-testid="step-note">{currentStep.note}</p>
       <p>Phase: row preview</p>
 
-      <svg class="dlx-board" viewBox="0 0 218 218" role="img" aria-label="2x2 board">
+      <svg
+        class="dlx-board"
+        viewBox="0 0 218 218"
+        role="img"
+        aria-label="2x2 board"
+      >
         {#each boardCells as cell, i}
           {@const x = (i % 2) * 109}
           {@const y = Math.floor(i / 2) * 109}
@@ -100,6 +116,7 @@
             height="99"
             rx="8"
             class:board-active={activeBoardCells.has(cell)}
+            data-testid={`board-${cell}`}
           />
           <text x={x + 54.5} y={y + 59} text-anchor="middle">{cell}</text>
         {/each}
