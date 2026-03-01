@@ -2,6 +2,6 @@
   <h1 class="text-2xl font-semibold text-slate-100">Manim Feature Sweep</h1>
   <p class="mt-3 max-w-2xl text-slate-300">
     Use the Scenes dropdown in the top bar to open a script/scene route.
-    This first slice implements only the mobjects basics port.
+    Time-wrap demo is available at <a class="text-cyan-300 underline" href="/time-wrap">/time-wrap</a>.
   </p>
 </section>
