@@ -1,68 +1,42 @@
 <script lang="ts">
   import {
+    createTimelineControllerState,
+    reduceTimelineState,
+    type Mode,
+    type TimelineCommand,
+  } from '$lib/feature-sweep/core/timeline-controller';
+  import {
     DURATION_MS,
     FRAME_STEP_MS,
-    advance,
-    clampTime,
     evaluateAt,
-    type Mode,
   } from '$lib/feature-sweep/time-wrap/core';
 
-  let mode = $state<Mode>('normal');
-  let isPlaying = $state(true);
-  let currentTimeMs = $state(0);
-  let lastTickMs = $state(0);
+  let timeline = $state(createTimelineControllerState(DURATION_MS, FRAME_STEP_MS));
 
-  const visual = $derived(evaluateAt(currentTimeMs, DURATION_MS));
-  const percent = $derived((currentTimeMs / DURATION_MS) * 100);
+  const visual = $derived(evaluateAt(timeline.currentTimeMs, timeline.durationMs));
+  const percent = $derived((timeline.currentTimeMs / timeline.durationMs) * 100);
+
+  function dispatch(command: TimelineCommand): void {
+    timeline = reduceTimelineState(timeline, command);
+  }
 
   function onModeChange(next: Mode): void {
-    mode = next;
-    if (next === 'time-wrap') {
-      isPlaying = false;
-    }
+    dispatch({ type: 'setMode', mode: next });
   }
 
   function onSliderInput(event: Event): void {
     const target = event.currentTarget as HTMLInputElement;
-    const next = Number(target.value);
-    currentTimeMs = clampTime(next, DURATION_MS);
-  }
-
-  function onPlayPause(): void {
-    if (mode === 'time-wrap') return;
-    isPlaying = !isPlaying;
-  }
-
-  function onReset(): void {
-    currentTimeMs = 0;
-    isPlaying = false;
-  }
-
-  function onPrev(): void {
-    currentTimeMs = clampTime(currentTimeMs - FRAME_STEP_MS, DURATION_MS);
-  }
-
-  function onNext(): void {
-    currentTimeMs = clampTime(currentTimeMs + FRAME_STEP_MS, DURATION_MS);
+    dispatch({ type: 'seek', timeMs: Number(target.value) });
   }
 
   $effect(() => {
-    if (mode !== 'normal' || !isPlaying) return;
+    if (timeline.mode !== 'normal' || !timeline.isPlaying) return;
 
     let raf = 0;
 
     const tick = (now: number) => {
-      if (lastTickMs === 0) {
-        lastTickMs = now;
-      }
-      const delta = now - lastTickMs;
-      lastTickMs = now;
-
-      currentTimeMs = advance(currentTimeMs, delta, DURATION_MS);
-      if (currentTimeMs >= DURATION_MS) {
-        isPlaying = false;
-      } else {
+      dispatch({ type: 'tick', nowMs: now });
+      if (timeline.mode === 'normal' && timeline.isPlaying) {
         raf = requestAnimationFrame(tick);
       }
     };
@@ -71,7 +45,6 @@
 
     return () => {
       cancelAnimationFrame(raf);
-      lastTickMs = 0;
     };
   });
 </script>
@@ -80,7 +53,7 @@
   <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
     <h1 class="text-2xl font-semibold">Time Wrap Demo</h1>
     <p class="mt-2 text-slate-300">
-      One evaluator drives both normal playback and instant time-wrap seeking.
+      Shared timeline controller primitives drive both modes and transport.
     </p>
   </div>
 
@@ -100,7 +73,7 @@
       />
 
       <text x="400" y="56" text-anchor="middle" fill="#e2e8f0" font-size="30">
-        mode: {mode}
+        mode: {timeline.mode}
       </text>
     </svg>
   </div>
@@ -111,7 +84,7 @@
       <select
         id="mode"
         class="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-        value={mode}
+        value={timeline.mode}
         onchange={(e) => onModeChange((e.currentTarget as HTMLSelectElement).value as Mode)}
       >
         <option value="normal">normal</option>
@@ -123,24 +96,24 @@
       class="w-full"
       type="range"
       min="0"
-      max={DURATION_MS}
+      max={timeline.durationMs}
       step="1"
-      value={currentTimeMs}
+      value={timeline.currentTimeMs}
       oninput={onSliderInput}
       aria-label="Time slider"
     />
 
     <div class="w-32 text-right text-sm tabular-nums text-cyan-300">
-      {Math.round(currentTimeMs)} ms
+      {Math.round(timeline.currentTimeMs)} ms
     </div>
 
     <div class="flex flex-wrap gap-2 md:col-span-3">
-      <button class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm" onclick={onPrev}>Prev</button>
-      <button class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm" onclick={onPlayPause} disabled={mode !== 'normal'}>
-        {isPlaying ? 'Pause' : 'Play'}
+      <button class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm" onclick={() => dispatch({ type: 'prev' })}>Prev</button>
+      <button class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm" onclick={() => dispatch({ type: 'playPause' })}>
+        {timeline.isPlaying ? 'Pause' : 'Play'}
       </button>
-      <button class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm" onclick={onNext}>Next</button>
-      <button class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm" onclick={onReset}>Reset</button>
+      <button class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm" onclick={() => dispatch({ type: 'next' })}>Next</button>
+      <button class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm" onclick={() => dispatch({ type: 'reset' })}>Reset</button>
       <div class="ml-auto min-w-44 text-right text-sm text-slate-300">
         progress: {percent.toFixed(1)}%
       </div>

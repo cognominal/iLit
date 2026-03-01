@@ -1,33 +1,19 @@
 import type { Component } from 'svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import AxesGraphsPlottingScene from './scenes/AxesGraphsPlottingScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import CairoParityScene from './scenes/CairoParityScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import CameraAnd3DScene from './scenes/CameraAnd3DScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import ExportProfilesScene from './scenes/ExportProfilesScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import GroupsLayersZIndexScene from './scenes/GroupsLayersZIndexScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import ImagesSvgAssetsScene from './scenes/ImagesSvgAssetsScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import LightingShading3DScene from './scenes/LightingShading3DScene.svelte';
 import MobjectsBasicsScene from './scenes/MobjectsBasicsScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import OpenGLParityScene from './scenes/OpenGLParityScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import PathsMorphsScene from './scenes/PathsMorphsScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import RateFunctionsTimingScene from './scenes/RateFunctionsTimingScene.svelte';
 import RegressionGoldenFramesScene from './scenes/RegressionGoldenFramesScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import SceneSectionsVoiceoverScene from './scenes/SceneSectionsVoiceoverScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import TextMathTexScene from './scenes/TextMathTexScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import TransformsCoreScene from './scenes/TransformsCoreScene.svelte';
-// @ts-expect-error Svelte component module typing gap in this scaffold.
 import UpdatersAlwaysRedrawScene from './scenes/UpdatersAlwaysRedrawScene.svelte';
 
 type SceneComponent = Component;

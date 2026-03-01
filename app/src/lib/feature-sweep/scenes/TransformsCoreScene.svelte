@@ -1,10 +1,24 @@
+<script lang="ts">
+  import { progressWindow } from './anim';
+
+  const { timeMs = 0 } = $props<{ timeMs?: number }>();
+
+  const squareP = $derived(progressWindow(timeMs, 0, 900));
+  const morphP = $derived(progressWindow(timeMs, 900, 900));
+
+  const squareDash = 640;
+  const circleDash = 530;
+
+  const squareDashOffset = $derived(squareDash * (1 - squareP));
+  const circleDashOffset = $derived(circleDash * (1 - morphP));
+  const squareOpacity = $derived(1 - morphP);
+  const circleOpacity = $derived(morphP);
+</script>
+
 <section class="rounded-xl border border-slate-700 bg-slate-950/80 p-4 shadow-xl">
   <svg viewBox="0 0 800 460" role="img" aria-label="Transforms core scene" class="w-full">
     <rect x="0" y="0" width="800" height="460" fill="#020617" />
-
-    <text x="400" y="80" text-anchor="middle" fill="#e2e8f0" font-size="40"
-      >Transforms Core</text
-    >
+    <text x="400" y="80" text-anchor="middle" fill="#e2e8f0" font-size="40">Transforms Core</text>
 
     <rect
       x="320"
@@ -15,7 +29,9 @@
       fill="none"
       stroke="#4cc9f0"
       stroke-width="8"
-      class="shape square"
+      stroke-dasharray={squareDash}
+      stroke-dashoffset={squareDashOffset}
+      opacity={squareOpacity > 0 ? squareOpacity : 0}
     />
 
     <circle
@@ -25,62 +41,9 @@
       fill="none"
       stroke="#f72585"
       stroke-width="8"
-      class="shape circle"
+      stroke-dasharray={circleDash}
+      stroke-dashoffset={circleDashOffset}
+      opacity={circleOpacity}
     />
   </svg>
 </section>
-
-<style>
-  .shape {
-    opacity: 0;
-    animation: show 900ms ease-out forwards;
-  }
-
-  .square {
-    stroke-dasharray: 640;
-    stroke-dashoffset: 640;
-    animation-name: draw-square;
-    animation-delay: 900ms;
-  }
-
-  .circle {
-    stroke-dasharray: 530;
-    stroke-dashoffset: 530;
-    animation-name: draw-circle;
-    animation-delay: 1800ms;
-  }
-
-  @keyframes show {
-    from {
-      opacity: 0;
-    }
-
-    to {
-      opacity: 1;
-    }
-  }
-
-  @keyframes draw-square {
-    from {
-      opacity: 1;
-      stroke-dashoffset: 640;
-    }
-
-    to {
-      opacity: 1;
-      stroke-dashoffset: 0;
-    }
-  }
-
-  @keyframes draw-circle {
-    from {
-      opacity: 1;
-      stroke-dashoffset: 530;
-    }
-
-    to {
-      opacity: 1;
-      stroke-dashoffset: 0;
-    }
-  }
-</style>

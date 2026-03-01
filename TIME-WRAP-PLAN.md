@@ -60,12 +60,23 @@ API sketch:
 
 Both modes consume this same core.
 
+Status:
+
+- Implemented with reusable primitive in
+  `app/src/lib/feature-sweep/core/timeline-controller.ts`.
+- Route-level handlers dispatch generic commands; policy no longer lives in UI.
+
 ### 3) Mode Semantics
 
 - Entering `time-wrap` pauses playback.
 - In `time-wrap`, slider input sets `currentTime` immediately.
 - Returning to `normal` keeps `currentTime`; user can press play.
 - `reset` sets `currentTime = 0` and pauses.
+
+Implemented primitive policy:
+
+- `seek` command forces `time-wrap` and pauses.
+- `prev` / `next` / `playPause` / `reset` commands force `normal`.
 
 ### 4) TS-Specific Transport Spec
 
