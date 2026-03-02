@@ -1,4 +1,7 @@
-# 2x2 Table (Svelte 5 + TypeScript + SVG)
+# Interactive Manim
+
+## 2x2 Table (Svelte 5 + TypeScript + SVG)
+
 
 This is the first piecemeal step in porting:
 

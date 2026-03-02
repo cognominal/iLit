@@ -1,9 +1,14 @@
 # imanin
 
 We want to get to an interactive manim in svelte.
-As a litmus test we want to port dlx_3x2_three_tiles.py
+As a litmus test we want to port dlx_3x2_three_tiles.py and do an
+interactive imanim presentation about dlx to solve it.
 
-In this repo we don't try to get a studio.
+We use the [dlx](https://grokipedia.com/page/Knuth's_Algorithm_X) algorithm to
+solve the pentomino [cuboid](https://pentomanim.vercel.app/cuboid-solver) in
+[cognominal/pentomanim/webgl](https://github.com/cognominal/pentomanim/tree/master/webgl)
+
+In this repo we don't yet try to get a studio.
 
 ## Run from repo root
 
