@@ -14,6 +14,7 @@
   );
 
   const current = $derived(page.url.pathname);
+  const captureMode = $derived(page.url.searchParams.get('capture') === '1');
 
   async function onChange(event: Event): Promise<void> {
     const target = event.currentTarget as HTMLSelectElement;
@@ -24,28 +25,30 @@
 </script>
 
 <div class="min-h-screen bg-slate-950 text-slate-100">
-  <header class="border-b border-slate-800 bg-slate-900/95">
-    <div class="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-      <a href="/" class="text-sm font-semibold tracking-wide text-cyan-300">
-        Feature Sweep
-      </a>
-      <label class="ml-auto flex items-center gap-2 text-sm">
-        <span class="text-slate-300">Scenes</span>
-        <select
-          class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm"
-          onchange={onChange}
-          value={options.some((opt) => opt.value === current) ? current : ''}
-        >
-          <option value="">Select scene...</option>
-          {#each options as option}
-            <option value={option.value}>{option.label}</option>
-          {/each}
-        </select>
-      </label>
-    </div>
-  </header>
+  {#if !captureMode}
+    <header class="border-b border-slate-800 bg-slate-900/95">
+      <div class="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+        <a href="/" class="text-sm font-semibold tracking-wide text-cyan-300">
+          Feature Sweep
+        </a>
+        <label class="ml-auto flex items-center gap-2 text-sm">
+          <span class="text-slate-300">Scenes</span>
+          <select
+            class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm"
+            onchange={onChange}
+            value={options.some((opt) => opt.value === current) ? current : ''}
+          >
+            <option value="">Select scene...</option>
+            {#each options as option}
+              <option value={option.value}>{option.label}</option>
+            {/each}
+          </select>
+        </label>
+      </div>
+    </header>
+  {/if}
 
-  <main class="mx-auto max-w-6xl px-4 py-6">
+  <main class={captureMode ? 'h-screen overflow-hidden' : 'mx-auto max-w-6xl px-4 py-6'}>
     {@render children()}
   </main>
 </div>
