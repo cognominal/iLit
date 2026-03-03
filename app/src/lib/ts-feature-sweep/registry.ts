@@ -10,6 +10,7 @@ import { buildImagesSvgAssetsScene } from './ts/imagesSvgAssets';
 import { buildLightingShading3DScene } from './ts/lightingShading3d';
 import { buildMobjectsBasicsScene } from './ts/mobjectsBasics';
 import { buildOpenGLParityScene } from './ts/openGlParity';
+import { buildPathToPathMorphScene } from './ts/pathToPathMorph';
 import { buildPathsMorphsScene } from './ts/pathsMorphs';
 import { buildRateFunctionsTimingScene } from './ts/rateFunctionsTiming';
 import { buildRegressionGoldenFramesScene } from './ts/regressionGoldenFrames';
@@ -36,7 +37,8 @@ const registry = new Map<string, TsSceneBuilder>([
   ['open_gl_vs_cairo_parity:opengl_parity', buildOpenGLParityScene],
   ['open_gl_vs_cairo_parity:cairo_parity', buildCairoParityScene],
   ['export_profiles:profile_sample', buildExportProfilesScene],
-  ['regression_golden_frames:golden_seed', buildRegressionGoldenFramesScene]
+  ['regression_golden_frames:golden_seed', buildRegressionGoldenFramesScene],
+  ['path_to_path_morphing:path_to_path', buildPathToPathMorphScene]
 ]);
 
 export function sceneBuilderFor(

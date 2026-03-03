@@ -196,6 +196,18 @@ export const tsScripts: TsScriptEntry[] = [
         description: 'Deterministic seeded frame baseline.'
       }
     ]
+  },
+  {
+    id: 'path_to_path_morphing',
+    title: '16 Path to Path Morphing',
+    source: 'app/src/lib/ts-feature-sweep/ts/pathToPathMorph.ts',
+    scenes: [
+      {
+        id: 'path_to_path',
+        title: 'Path to Path',
+        description: 'ReplacementTransform between two SVG-like paths.'
+      }
+    ]
   }
 ];
 

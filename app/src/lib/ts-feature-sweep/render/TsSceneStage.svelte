@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Mobject } from '$lib/feature-sweep/manim-api';
+  import type { Mobject, Point } from '$lib/feature-sweep/manim-api';
 
   type Props = {
     mobjects: Mobject[];
@@ -69,7 +69,65 @@
   function pointsFor(m: Mobject, count: number): Array<{ x: number; y: number }> {
     if (m.kind === 'square') return squarePoints(m, count);
     if (m.kind === 'circle') return circlePoints(m, count);
+    if (m.kind === 'path') return resamplePathPoints(m.points ?? [], count, m.closed ?? true);
     return [];
+  }
+
+  function segmentLength(a: Point, b: Point): number {
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  }
+
+  function pathLength(points: Point[], closed: boolean): number {
+    if (points.length < 2) return 0;
+    let len = 0;
+    for (let i = 1; i < points.length; i += 1) {
+      len += segmentLength(points[i - 1], points[i]);
+    }
+    if (closed) len += segmentLength(points[points.length - 1], points[0]);
+    return len;
+  }
+
+  function resamplePathPoints(
+    points: Point[],
+    count: number,
+    closed: boolean
+  ): Point[] {
+    if (points.length === 0 || count <= 0) return [];
+    if (points.length === 1) return Array.from({ length: count }, () => points[0]);
+    const total = pathLength(points, closed);
+    if (total <= 0) return Array.from({ length: count }, () => points[0]);
+
+    const segments: Array<{ a: Point; b: Point; length: number }> = [];
+    for (let i = 1; i < points.length; i += 1) {
+      const a = points[i - 1];
+      const b = points[i];
+      segments.push({ a, b, length: segmentLength(a, b) });
+    }
+    if (closed) {
+      const a = points[points.length - 1];
+      const b = points[0];
+      segments.push({ a, b, length: segmentLength(a, b) });
+    }
+
+    const result: Point[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const target = (i / count) * total;
+      let acc = 0;
+      let chosen = segments[0];
+      for (const seg of segments) {
+        if (acc + seg.length >= target) {
+          chosen = seg;
+          break;
+        }
+        acc += seg.length;
+      }
+      const local = chosen.length > 0 ? (target - acc) / chosen.length : 0;
+      result.push({
+        x: chosen.a.x + (chosen.b.x - chosen.a.x) * local,
+        y: chosen.a.y + (chosen.b.y - chosen.a.y) * local
+      });
+    }
+    return result;
   }
 
   function pathFrom(points: Array<{ x: number; y: number }>): string {
@@ -79,6 +137,16 @@
       d += ` L ${points[i].x.toFixed(2)} ${points[i].y.toFixed(2)}`;
     }
     return `${d} Z`;
+  }
+
+  function polylinePathFrom(points: Point[], closed: boolean): string {
+    if (points.length === 0) return '';
+    let d = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+    for (let i = 1; i < points.length; i += 1) {
+      d += ` L ${points[i].x.toFixed(2)} ${points[i].y.toFixed(2)}`;
+    }
+    if (closed) d += ' Z';
+    return d;
   }
 
   function lerpPoints(
@@ -171,6 +239,20 @@
         cx={mobject.x}
         cy={mobject.y}
         r={radius}
+        fill="none"
+        stroke={mobject.stroke}
+        stroke-width={mobject.strokeWidth}
+        stroke-dasharray={strokeDash(drawProgress, length)}
+        stroke-dashoffset={strokeOffset(drawProgress, length)}
+      />
+    {:else if mobject.kind === 'path'}
+      {@const points = mobject.points ?? []}
+      {@const closed = mobject.closed ?? true}
+      {@const d = polylinePathFrom(points, closed)}
+      {@const length = pathLength(points, closed)}
+      <path
+        id={mobject.id}
+        d={d}
         fill="none"
         stroke={mobject.stroke}
         stroke-width={mobject.strokeWidth}

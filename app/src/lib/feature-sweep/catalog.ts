@@ -116,6 +116,18 @@ export const scripts: ScriptEntry[] = [
     title: '15 Regression Golden Frames',
     file: 'py/15_regression_golden_frames.py',
     scenes: [{ id: 'golden_seed', title: 'Golden Seed', description: 'Deterministic seeded frame baseline.' }]
+  },
+  {
+    id: 'path_to_path_morphing',
+    title: '16 Path to Path Morphing',
+    file: 'py/16_path_to_path_morphing.py',
+    scenes: [
+      {
+        id: 'path_to_path',
+        title: 'Path to Path',
+        description: 'ReplacementTransform between two vector paths.'
+      }
+    ]
   }
 ];
 

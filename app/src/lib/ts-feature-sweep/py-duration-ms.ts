@@ -8,6 +8,7 @@ export const pyDurationMsByScene: Record<string, number> = {
   'mobjects_basics:basics_layout': 2000,
   'open_gl_vs_cairo_parity:cairo_parity': 500,
   'open_gl_vs_cairo_parity:opengl_parity': 500,
+  'path_to_path_morphing:path_to_path': 2200,
   'paths_and_morphs:path_morph': 4500,
   'rate_functions_and_timing:timing_demo': 2000,
   'regression_golden_frames:golden_seed': 400,

@@ -1,4 +1,6 @@
-export type MobjectKind = 'square' | 'circle' | 'text';
+export type MobjectKind = 'square' | 'circle' | 'text' | 'path';
+
+export type Point = { x: number; y: number };
 
 export type Mobject = {
   id: string;
@@ -12,6 +14,8 @@ export type Mobject = {
   radius?: number;
   text?: string;
   fontSize?: number;
+  points?: Point[];
+  closed?: boolean;
 };
 
 export type Animation = {
@@ -88,6 +92,26 @@ export function TitleText(id: string, opts: { x: number; y: number; value: strin
     fill: opts.fill ?? '#e2e8f0',
     strokeWidth: 1,
     fontSize: opts.fontSize ?? 46,
+  };
+}
+
+export function Path(
+  id: string,
+  opts: {
+    points: Point[];
+    stroke: string;
+    strokeWidth?: number;
+    closed?: boolean;
+  }
+): Mobject {
+  return {
+    id,
+    kind: 'path',
+    points: opts.points,
+    stroke: opts.stroke,
+    strokeWidth: opts.strokeWidth ?? 8,
+    fill: 'none',
+    closed: opts.closed ?? true
   };
 }
 
