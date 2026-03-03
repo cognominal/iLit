@@ -16,6 +16,9 @@
   const current = $derived(page.url.pathname);
   const captureMode = $derived(page.url.searchParams.get('capture') === '1');
   const isDlxRoute = $derived(current === '/dlx');
+  const isTsSweepRoute = $derived(
+    current === '/ts-sweep' || current.startsWith('/ts-scenes/')
+  );
 
   async function onChange(event: Event): Promise<void> {
     const target = event.currentTarget as HTMLSelectElement;
@@ -37,6 +40,14 @@
           class="text-sm font-medium text-slate-300 hover:text-cyan-300"
         >
           DLX
+        </a>
+        <a
+          href="/ts-sweep"
+          class="text-sm font-medium hover:text-cyan-300"
+          class:text-cyan-300={isTsSweepRoute}
+          class:text-slate-300={!isTsSweepRoute}
+        >
+          ts sweep
         </a>
         {#if !isDlxRoute}
           <label class="ml-auto flex items-center gap-2 text-sm">
