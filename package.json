@@ -6,6 +6,7 @@
     "build": "bun run --cwd app build",
     "check": "bun run --cwd app check",
     "test:e2e": "bun run --cwd app test:e2e",
-    "render:py-mp4": "bun run scripts/render-py-mp4.ts"
+    "render:py-mp4": "bun run scripts/render-py-mp4.ts",
+    "check:parity:dlxn": "bun run --cwd app check:parity:dlxn"
   }
 }

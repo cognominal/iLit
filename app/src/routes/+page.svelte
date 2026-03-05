@@ -8,4 +8,8 @@
     DLX matrix animation is available at
     <a class="text-cyan-300 underline" href="/dlx">/dlx</a>.
   </p>
+  <p class="mt-2 max-w-2xl text-slate-300">
+    New parity scaffold route is available at
+    <a class="text-cyan-300 underline" href="/dlxn">/dlxn</a>.
+  </p>
 </section>

@@ -52,6 +52,12 @@
               DLX
             </a>
             <a
+              href="/dlxn"
+              class="text-sm font-medium text-slate-300 hover:text-cyan-300"
+            >
+              DLXn
+            </a>
+            <a
               href="/ts-sweep"
               class="text-sm font-medium hover:text-cyan-300"
               class:text-cyan-300={isTsSweepRoute}
@@ -96,6 +102,12 @@
             class="text-sm font-medium text-slate-300 hover:text-cyan-300"
           >
             DLX
+          </a>
+          <a
+            href="/dlxn"
+            class="text-sm font-medium text-slate-300 hover:text-cyan-300"
+          >
+            DLXn
           </a>
           <a
             href="/ts-sweep"

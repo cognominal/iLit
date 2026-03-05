@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { findTsScene, findTsScript } from '$lib/ts-feature-sweep/catalog';
 import { findScript } from '$lib/feature-sweep/catalog';
@@ -42,6 +42,9 @@ export async function load({ params }) {
     safeRead(pySourcePath),
     safeRead(tsSourcePath)
   ]);
+  const tsSourceMtimeMs = await stat(tsSourcePath)
+    .then((meta) => meta.mtimeMs)
+    .catch(() => null);
 
   return {
     script,
@@ -49,6 +52,7 @@ export async function load({ params }) {
     pySourcePath,
     tsSourcePath,
     pySourceText,
-    tsSourceText
+    tsSourceText,
+    tsSourceMtimeMs
   };
 }

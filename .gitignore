@@ -25,6 +25,8 @@ coverage/
 **/coverage/
 
 # Generated media exports
+media/
+**/media/
 media/ts-mp4/
 **/media/ts-mp4/
 media/py-mp4/

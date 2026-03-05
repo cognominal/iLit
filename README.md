@@ -10,18 +10,21 @@ agency.
 
 In this repo we don't yet try to get a studio.
 
-## getting something minimal
-
-As a first stagee,
-We try to get feature parity from some random .py manim files
-codex lifted from somewhere or created out of whole cloth and the
-ts imanim files created from that.
+## creating an UI for iterative improvement
 
 We created a UI to show
 
 - py side : the original .py file, the resulting .mp4 generated,
 - ts side : the .ts file, the interactive scene (now just time warp with a
 slider), the resulting .mp4 generated.
+- the ts code mirror pane is writable so we can experiment without asking codex.
+
+## getting something minimal
+
+As a first stages,
+We try to get feature parity from some random .py manim files
+codex lifted from somewhere or created out of whole cloth and the
+ts imanim files created from that.
 
 Note that with ts, the real deliverable will be a route in a sveltekit app.
 

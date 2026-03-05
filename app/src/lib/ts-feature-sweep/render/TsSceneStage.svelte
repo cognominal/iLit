@@ -4,6 +4,7 @@
   type Props = {
     mobjects: Mobject[];
     progressById: Map<string, number>;
+    positionsById?: Map<string, { x: number; y: number }>;
     replacements?: Array<{
       sourceId: string;
       targetId: string;
@@ -16,10 +17,19 @@
   const {
     mobjects,
     progressById,
+    positionsById = new Map<string, { x: number; y: number }>(),
     replacements = [],
     completedReplacementSources = new Set<string>(),
     completedReplacementTargets = new Set<string>()
   }: Props = $props();
+
+  function posX(mobject: Mobject): number | undefined {
+    return positionsById.get(mobject.id)?.x ?? mobject.x;
+  }
+
+  function posY(mobject: Mobject): number | undefined {
+    return positionsById.get(mobject.id)?.y ?? mobject.y;
+  }
 
   function strokeDash(progress: number, length: number): string {
     const drawn = Math.max(0.001, Math.min(1, progress)) * length;
@@ -28,6 +38,10 @@
 
   function strokeOffset(progress: number, length: number): number {
     return -Math.max(0, length * (1 - Math.max(0.001, Math.min(1, progress))));
+  }
+
+  function strokeOffsetForward(progress: number, length: number): number {
+    return Math.max(0, length * (1 - Math.max(0.001, Math.min(1, progress))));
   }
 
   function squarePoints(m: Mobject, count: number): Array<{ x: number; y: number }> {
@@ -69,6 +83,7 @@
   function pointsFor(m: Mobject, count: number): Array<{ x: number; y: number }> {
     if (m.kind === 'square') return squarePoints(m, count);
     if (m.kind === 'circle') return circlePoints(m, count);
+    if (m.kind === 'dot') return circlePoints(m, count);
     if (m.kind === 'path') return resamplePathPoints(m.points ?? [], count, m.closed ?? true);
     return [];
   }
@@ -207,8 +222,8 @@
     {#if mobject.kind === 'text'}
       <text
         id={mobject.id}
-        x={mobject.x}
-        y={mobject.y}
+        x={posX(mobject)}
+        y={posY(mobject)}
         fill={mobject.fill ?? '#e2e8f0'}
         fill-opacity={drawProgress}
         text-anchor="middle"
@@ -221,8 +236,8 @@
       {@const length = size * 4}
       <rect
         id={mobject.id}
-        x={(mobject.x ?? 0) - size / 2}
-        y={(mobject.y ?? 0) - size / 2}
+        x={(posX(mobject) ?? 0) - size / 2}
+        y={(posY(mobject) ?? 0) - size / 2}
         width={size}
         height={size}
         fill="none"
@@ -236,8 +251,8 @@
       {@const length = Math.PI * radius * 2}
       <circle
         id={mobject.id}
-        cx={mobject.x}
-        cy={mobject.y}
+        cx={posX(mobject)}
+        cy={posY(mobject)}
         r={radius}
         fill="none"
         stroke={mobject.stroke}
@@ -257,7 +272,18 @@
         stroke={mobject.stroke}
         stroke-width={mobject.strokeWidth}
         stroke-dasharray={strokeDash(drawProgress, length)}
-        stroke-dashoffset={strokeOffset(drawProgress, length)}
+        stroke-dashoffset={strokeOffsetForward(drawProgress, length)}
+      />
+    {:else if mobject.kind === 'dot'}
+      <circle
+        id={mobject.id}
+        cx={posX(mobject)}
+        cy={posY(mobject)}
+        r={mobject.radius ?? 8}
+        fill={mobject.fill ?? mobject.stroke ?? '#e2e8f0'}
+        stroke={mobject.stroke}
+        stroke-width={mobject.strokeWidth}
+        fill-opacity={drawProgress}
       />
     {/if}
     {/if}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { EditorState } from '@codemirror/state';
+  import { Annotation, EditorState } from '@codemirror/state';
   import { EditorView } from '@codemirror/view';
   import { python } from '@codemirror/lang-python';
   import { javascript } from '@codemirror/lang-javascript';
@@ -11,11 +11,20 @@
   const {
     value,
     language,
-    heightClass = 'h-72'
-  }: { value: string; language: Language; heightClass?: string } = $props();
+    heightClass = 'h-72',
+    editable = false,
+    onChange
+  }: {
+    value: string;
+    language: Language;
+    heightClass?: string;
+    editable?: boolean;
+    onChange?: (next: string) => void;
+  } = $props();
 
   let host: HTMLDivElement | null = null;
   let view: EditorView | null = null;
+  const syncAnnotation = Annotation.define<boolean>();
 
   function extensionFor(lang: Language) {
     return lang === 'python' ? python() : javascript({ typescript: true });
@@ -29,8 +38,15 @@
       extensions: [
         oneDark,
         extensionFor(language),
-        EditorState.readOnly.of(true),
-        EditorView.editable.of(false),
+        EditorState.readOnly.of(!editable),
+        EditorView.editable.of(editable),
+        EditorView.updateListener.of((update) => {
+          if (update.transactions.some((tx) => tx.annotation(syncAnnotation))) {
+            return;
+          }
+          if (!update.docChanged || !onChange) return;
+          onChange(update.state.doc.toString());
+        }),
         EditorView.lineWrapping
       ]
     });
@@ -38,12 +54,6 @@
   }
 
   onMount(() => {
-    buildEditor();
-  });
-
-  $effect(() => {
-    value;
-    language;
     buildEditor();
   });
 
