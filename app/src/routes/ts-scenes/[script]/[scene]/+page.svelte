@@ -8,15 +8,15 @@
     type Mode,
     type TimelineCommand
   } from '$lib/feature-sweep/core/timeline-controller';
-  import { FRAME_STEP_MS } from '$lib/feature-sweep/time-wrap/core';
-  import type { Scene } from '$lib/feature-sweep/manim-api';
+  import { FRAME_STEP_SEC } from '$lib/feature-sweep/time-wrap/core';
+  import type { Point, Scene } from '$lib/feature-sweep/manim-api';
   import TsSceneStage from '$lib/ts-feature-sweep/render/TsSceneStage.svelte';
   import SplitPane from '$lib/vendor/rich-split-pane/SplitPane.svelte';
   import type { Length } from '$lib/vendor/rich-split-pane/types';
   import ReadOnlyCodeMirror from '$lib/components/ReadOnlyCodeMirror.svelte';
-  import { pyDurationMsFor } from '$lib/ts-feature-sweep/py-duration-ms';
+  import { pyDurationSecFor } from '$lib/ts-feature-sweep/py-duration-ms';
   import { sceneBuilderFor } from '$lib/ts-feature-sweep/registry';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
 
   const { data } = $props<{
     data: {
@@ -34,10 +34,11 @@
       tsSourcePath: string;
       pySourceText: string;
       tsSourceText: string;
+      tsSourceMtimeMs: number | null;
     };
   }>();
 
-  let timeline = $state(createTimelineControllerState(6000, FRAME_STEP_MS));
+  let timeline = $state(createTimelineControllerState(6, FRAME_STEP_SEC));
   let exportingProfile = $state<null | 'lowres' | 'medres' | 'hires'>(null);
   let exportMessage = $state('');
   let exportError = $state('');
@@ -68,20 +69,26 @@
     };
     thumbnail: string;
   } | null>(null);
+  let tsEditorText = $state('');
+  let tsBaseText = $state('');
+  let tsSourceMtimeMs = $state<number | null>(null);
+  let saveState = $state<'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'conflict'>('idle');
+  let saveMessage = $state('');
 
   let scene = $state<Scene | null>(null);
   let sceneResolved = $state(false);
-  let intrinsicTotalMs = $state(0);
-  let targetDurationMs = $state(6000);
+  let sceneBuildError = $state('');
+  let intrinsicTotalSec = $state(0);
+  let targetDurationSec = $state(6);
   let mainSplitPos = $state<Length>('52%');
   let codeSplitPos = $state<Length>('50%');
   const progress = $derived(progress01(timeline));
   const captureMode = $derived(page.url.searchParams.get('capture') === '1');
 
-  const intrinsicTimeMs = $derived(
-    timeline.durationMs > 0 && intrinsicTotalMs > 0
-      ? (timeline.currentTimeMs / timeline.durationMs) * intrinsicTotalMs
-      : timeline.currentTimeMs
+  const intrinsicTimeSec = $derived(
+    timeline.durationSec > 0 && intrinsicTotalSec > 0
+      ? (timeline.currentTimeSec / timeline.durationSec) * intrinsicTotalSec
+      : timeline.currentTimeSec
   );
 
   const progressById = $derived.by(() => {
@@ -98,16 +105,20 @@
     for (const phase of [...stepsByPhase.keys()].sort((a, b) => a - b)) {
       const steps = stepsByPhase.get(phase) ?? [];
       const phaseDuration = steps.reduce(
-        (maxMs, step) => Math.max(maxMs, step.runTimeMs),
+        (maxMs, step) => Math.max(maxMs, step.runTime),
         0
       );
 
       for (const step of steps) {
-        if (step.kind !== 'create' || !step.targetId) continue;
-        const raw = (intrinsicTimeMs - phaseStart) / step.runTimeMs;
+        if (!step.targetId) continue;
+        const raw = (intrinsicTimeSec - phaseStart) / step.runTime;
         const stepProgress = Math.max(0, Math.min(1, raw));
-        const previous = byId.get(step.targetId) ?? 0;
-        byId.set(step.targetId, Math.max(previous, stepProgress));
+        if (step.kind === 'create') {
+          const previous = byId.get(step.targetId) ?? 0;
+          byId.set(step.targetId, Math.max(previous, stepProgress));
+        } else if (step.kind === 'moveAlongPath' && intrinsicTimeSec >= phaseStart) {
+          byId.set(step.targetId, 1);
+        }
       }
 
       phaseStart += phaseDuration;
@@ -135,7 +146,7 @@
     for (const phase of [...stepsByPhase.keys()].sort((a, b) => a - b)) {
       const steps = stepsByPhase.get(phase) ?? [];
       const phaseDuration = steps.reduce(
-        (maxMs, step) => Math.max(maxMs, step.runTimeMs),
+        (maxMs, step) => Math.max(maxMs, step.runTime),
         0
       );
 
@@ -147,7 +158,7 @@
         ) {
           continue;
         }
-        const raw = (intrinsicTimeMs - phaseStart) / step.runTimeMs;
+        const raw = (intrinsicTimeSec - phaseStart) / step.runTime;
         const stepProgress = Math.max(0, Math.min(1, raw));
         if (stepProgress > 0 && stepProgress < 1) {
           active.push({
@@ -167,30 +178,110 @@
     return { active, completedSources, completedTargets };
   });
 
+  function segmentLength(a: Point, b: Point): number {
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  }
+
+  function pointAlongPath(points: Point[], t: number): Point {
+    if (points.length === 0) return { x: 0, y: 0 };
+    if (points.length === 1) return points[0];
+    const clamped = Math.max(0, Math.min(1, t));
+    let total = 0;
+    for (let i = 1; i < points.length; i += 1) {
+      total += segmentLength(points[i - 1], points[i]);
+    }
+    if (total <= 0) return points[0];
+    const target = total * clamped;
+    let acc = 0;
+    for (let i = 1; i < points.length; i += 1) {
+      const a = points[i - 1];
+      const b = points[i];
+      const len = segmentLength(a, b);
+      if (acc + len >= target) {
+        const local = len > 0 ? (target - acc) / len : 0;
+        return {
+          x: a.x + (b.x - a.x) * local,
+          y: a.y + (b.y - a.y) * local
+        };
+      }
+      acc += len;
+    }
+    return points[points.length - 1];
+  }
+
+  const positionsById = $derived.by(() => {
+    const positions = new Map<string, { x: number; y: number }>();
+    if (!scene) return positions;
+
+    const stepsByPhase = scene.timeline.reduce((phases, step) => {
+      const group = phases.get(step.phase) ?? [];
+      group.push(step);
+      phases.set(step.phase, group);
+      return phases;
+    }, new Map<number, typeof scene.timeline>());
+    let phaseStart = 0;
+
+    for (const phase of [...stepsByPhase.keys()].sort((a, b) => a - b)) {
+      const steps = stepsByPhase.get(phase) ?? [];
+      const phaseDuration = steps.reduce(
+        (maxMs, step) => Math.max(maxMs, step.runTime),
+        0
+      );
+      for (const step of steps) {
+        if (
+          step.kind !== 'moveAlongPath' ||
+          !step.targetId ||
+          !step.pathId
+        ) {
+          continue;
+        }
+        const target = scene.mobjects.find((m) => m.id === step.targetId);
+        const path = scene.mobjects.find((m) => m.id === step.pathId);
+        if (!target || !path?.points || path.points.length < 2) continue;
+        const raw = (intrinsicTimeSec - phaseStart) / step.runTime;
+        const stepProgress = Math.max(0, Math.min(1, raw));
+        const at = pointAlongPath(path.points, stepProgress);
+        positions.set(target.id, at);
+      }
+      phaseStart += phaseDuration;
+    }
+    return positions;
+  });
+
   function dispatch(command: TimelineCommand): void {
     timeline = reduceTimelineState(timeline, command);
   }
 
   $effect(() => {
     sceneResolved = false;
+    sceneBuildError = '';
     const scriptId = data.script.id;
     const sceneId = data.scene.id;
     const builder = sceneBuilderFor(scriptId, sceneId);
-    const nextScene = builder ? builder() : null;
-    scene = nextScene;
-    intrinsicTotalMs = nextScene
-      ? Array.from(
-          nextScene.timeline.reduce((phases, step) => {
-            const prev = phases.get(step.phase) ?? 0;
-            phases.set(step.phase, Math.max(prev, step.runTimeMs));
-            return phases;
-          }, new Map<number, number>()).values()
-        ).reduce((sum, phaseMs) => sum + phaseMs, 0)
-      : 0;
-    const targetMs = pyDurationMsFor(scriptId, sceneId) ?? intrinsicTotalMs;
-    targetDurationMs = targetMs;
-    const ms = targetMs > 0 ? targetMs : 6000;
-    timeline = createTimelineControllerState(ms, FRAME_STEP_MS);
+    try {
+      const nextScene = builder ? builder() : null;
+      scene = nextScene;
+      intrinsicTotalSec = nextScene
+        ? Array.from(
+            nextScene.timeline.reduce((phases, step) => {
+              const prev = phases.get(step.phase) ?? 0;
+              phases.set(step.phase, Math.max(prev, step.runTime));
+              return phases;
+            }, new Map<number, number>()).values()
+          ).reduce((sum, phaseMs) => sum + phaseMs, 0)
+        : 0;
+      const targetSecFromPy = pyDurationSecFor(scriptId, sceneId);
+      const targetSec = targetSecFromPy ?? intrinsicTotalSec;
+      targetDurationSec = targetSec;
+      const durationSec = targetSec > 0 ? targetSec : 6;
+      timeline = createTimelineControllerState(durationSec, FRAME_STEP_SEC);
+    } catch (cause) {
+      scene = null;
+      intrinsicTotalSec = 0;
+      sceneBuildError = cause instanceof Error
+        ? cause.message
+        : 'Scene build failed.';
+    }
     sceneResolved = true;
   });
 
@@ -219,13 +310,78 @@
     mp4GenerationAbort?.abort();
   });
 
+  onMount(() => {
+    tsEditorText = data.tsSourceText;
+    tsBaseText = data.tsSourceText;
+    tsSourceMtimeMs = data.tsSourceMtimeMs;
+    saveState = 'idle';
+    saveMessage = '';
+  });
+
+  const tsIsDirty = $derived(tsEditorText !== tsBaseText);
+
+  async function saveTsSource(force = false): Promise<void> {
+    if (!tsIsDirty && !force) return;
+    saveState = 'saving';
+    saveMessage = '';
+    try {
+      const response = await fetch(
+        `/ts-scenes/${data.script.id}/${data.scene.id}/save-ts`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            content: tsEditorText,
+            expectedMtimeMs: tsSourceMtimeMs,
+            force
+          })
+        }
+      );
+      if (response.status === 409) {
+        saveState = 'conflict';
+        const payload = await response.json().catch(() => ({}));
+        saveMessage = payload?.message ?? 'Save conflict.';
+        return;
+      }
+      if (response.status === 422) {
+        const payload = await response.json().catch(() => ({}));
+        saveState = 'error';
+        saveMessage = payload?.message ?? 'TypeScript compile error.';
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`save failed (${response.status})`);
+      }
+      const payload = await response.json() as { mtimeMs: number };
+      tsBaseText = tsEditorText;
+      tsSourceMtimeMs = payload.mtimeMs;
+      saveState = 'saved';
+      saveMessage = 'Saved';
+      void refreshMp4Status();
+    } catch (cause) {
+      saveState = 'error';
+      saveMessage = cause instanceof Error ? cause.message : 'Save failed';
+    }
+  }
+
+  function onEditorKeydown(event: KeyboardEvent): void {
+    const isSave = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's';
+    if (!isSave) return;
+    event.preventDefault();
+    void saveTsSource();
+  }
+
+  function onTsEditorChange(next: string): void {
+    tsEditorText = next;
+  }
+
   function onModeChange(next: Mode): void {
     dispatch({ type: 'setMode', mode: next });
   }
 
   function onScrub(event: Event): void {
     const target = event.currentTarget as HTMLInputElement;
-    dispatch({ type: 'seek', timeMs: Number(target.value) });
+    dispatch({ type: 'seek', timeSec: Number(target.value) });
   }
 
   function bytesToMb(bytes: number): string {
@@ -401,17 +557,21 @@
   }
 </script>
 
-<svelte:window onpointerdown={onGlobalPointerDown} />
+<svelte:window
+  onpointerdown={onGlobalPointerDown}
+  onkeydown={onEditorKeydown}
+/>
 
 {#if captureMode}
   <section class="h-full">
     {#if scene}
-      <TsSceneStage
-        mobjects={scene.mobjects}
-        {progressById}
-        replacements={replacementState.active}
-        completedReplacementSources={replacementState.completedSources}
-        completedReplacementTargets={replacementState.completedTargets}
+                  <TsSceneStage
+                    mobjects={scene.mobjects}
+                    {progressById}
+                    {positionsById}
+                    replacements={replacementState.active}
+                    completedReplacementSources={replacementState.completedSources}
+                    completedReplacementTargets={replacementState.completedTargets}
       />
     {:else if !sceneResolved}
       <div class="h-full rounded-xl border border-slate-800 bg-slate-950"></div>
@@ -473,15 +633,15 @@
                 class="w-full"
                 type="range"
                 min="0"
-                max={timeline.durationMs}
-                step="1"
-                value={timeline.currentTimeMs}
+                max={timeline.durationSec}
+                step="0.01"
+                value={timeline.currentTimeSec}
                 oninput={onScrub}
                 aria-label="Time slider"
               />
 
               <div class="w-32 text-right text-sm tabular-nums text-cyan-300">
-                {Math.round(timeline.currentTimeMs)} ms
+                {timeline.currentTimeSec.toFixed(2)} sec
               </div>
 
               <div class="flex flex-wrap gap-2 md:col-span-3">
@@ -556,6 +716,7 @@
               <TsSceneStage
                 mobjects={scene.mobjects}
                 {progressById}
+                {positionsById}
                 replacements={replacementState.active}
                 completedReplacementSources={replacementState.completedSources}
                 completedReplacementTargets={replacementState.completedTargets}
@@ -648,6 +809,15 @@
                 Missing TS scene builder.
               </div>
             {/if}
+            {#if sceneBuildError}
+              <div
+                class="rounded-xl border border-amber-700 bg-amber-950/30 p-3
+                text-sm text-amber-200"
+              >
+                Using last valid scene build. Current source error:
+                {sceneBuildError}
+              </div>
+            {/if}
           </div>
         </div>
       {/snippet}
@@ -694,11 +864,13 @@
                     </svg>
                   </button>
                 </div>
-                <ReadOnlyCodeMirror
-                  value={data.pySourceText}
-                  language="python"
-                  heightClass="h-full"
-                />
+                {#key `py:${data.script.id}:${data.scene.id}`}
+                  <ReadOnlyCodeMirror
+                    value={data.pySourceText}
+                    language="python"
+                    heightClass="h-full"
+                  />
+                {/key}
               </div>
             {/snippet}
 
@@ -706,11 +878,46 @@
               <div class="flex h-full min-h-0 flex-col">
                 <div class="mb-2 flex items-baseline gap-2">
                   <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
-                    TypeScript Source
+                    TypeScript Source {tsIsDirty ? '●' : ''}
                   </h2>
                   <p class="min-w-0 truncate text-xs text-slate-400">
                     {data.tsSourcePath}
                   </p>
+                  <span
+                    class="shrink-0 text-xs"
+                    class:text-emerald-300={saveState === 'saved'}
+                    class:text-amber-300={tsIsDirty || saveState === 'saving'}
+                    class:text-rose-300={saveState === 'error' || saveState === 'conflict'}
+                    class:text-slate-400={!tsIsDirty && saveState === 'idle'}
+                  >
+                    {saveState === 'idle' && tsIsDirty ? 'Dirty' :
+                      saveState === 'idle' ? '' :
+                      saveState === 'saving' ? 'Saving...' :
+                      saveState === 'saved' ? 'Saved' :
+                      saveState === 'conflict' ? 'Conflict' : 'Error'}
+                  </span>
+                  {#if saveMessage}
+                    <span class="shrink-0 text-xs text-slate-400">{saveMessage}</span>
+                  {/if}
+                  <button
+                    class="shrink-0 rounded border border-emerald-700 px-2 py-1
+                    text-xs text-emerald-300 disabled:opacity-50"
+                    onclick={() => void saveTsSource()}
+                    disabled={!tsIsDirty || saveState === 'saving'}
+                    title="Save (Ctrl/Cmd+S)"
+                  >
+                    Save
+                  </button>
+                  {#if saveState === 'conflict'}
+                    <button
+                      class="shrink-0 rounded border border-rose-700 px-2 py-1
+                      text-xs text-rose-300"
+                      onclick={() => void saveTsSource(true)}
+                      title="Force overwrite"
+                    >
+                      Force
+                    </button>
+                  {/if}
                   <button
                     class="shrink-0 rounded border border-slate-700 p-1 text-slate-300
                     hover:text-cyan-300"
@@ -734,11 +941,15 @@
                     </svg>
                   </button>
                 </div>
-                <ReadOnlyCodeMirror
-                  value={data.tsSourceText}
-                  language="typescript"
-                  heightClass="h-full"
-                />
+                {#key `${data.script.id}:${data.scene.id}:${tsSourceMtimeMs ?? 0}`}
+                  <ReadOnlyCodeMirror
+                    value={tsBaseText}
+                    language="typescript"
+                    heightClass="h-full"
+                    editable={true}
+                    onChange={onTsEditorChange}
+                  />
+                {/key}
               </div>
             {/snippet}
           </SplitPane>

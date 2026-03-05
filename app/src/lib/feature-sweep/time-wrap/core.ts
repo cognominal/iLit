@@ -5,16 +5,16 @@ export type TimeWrapState = {
   opacity: number;
 };
 
-export const DURATION_MS = 6000;
-export const FRAME_STEP_MS = 120;
+export const DURATION_SEC = 6;
+export const FRAME_STEP_SEC = 0.12;
 
 function easeInOutSine(t01: number): number {
   return -(Math.cos(Math.PI * t01) - 1) / 2;
 }
 
-export function evaluateAt(tMs: number, durationMs = DURATION_MS): TimeWrapState {
-  const t = Math.max(0, Math.min(tMs, durationMs));
-  const p = durationMs === 0 ? 0 : t / durationMs;
+export function evaluateAt(tSec: number, durationSec = DURATION_SEC): TimeWrapState {
+  const t = Math.max(0, Math.min(tSec, durationSec));
+  const p = durationSec === 0 ? 0 : t / durationSec;
 
   const x = 110 + 560 * easeInOutSine(p);
   const y = 230 + Math.sin(p * Math.PI * 2) * 70;

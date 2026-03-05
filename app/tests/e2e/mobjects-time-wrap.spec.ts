@@ -24,13 +24,13 @@ test('mobjects basics starts paused with first frame visible', async ({
   await expect(circle).toHaveCount(1);
 
   const timeLabel = page.locator('div.w-32.text-right.text-sm.tabular-nums.text-cyan-300');
-  await expect(timeLabel).toContainText('0 ms');
+  await expect(timeLabel).toContainText('0.00 sec');
 
   await page.getByRole('button', { name: 'Play' }).click();
   await page.waitForTimeout(250);
   await expect
     .poll(async () => {
-      const text = (await timeLabel.textContent()) ?? '0 ms';
+      const text = (await timeLabel.textContent()) ?? '0.00 sec';
       const parsed = Number.parseInt(text.replace(/[^\d]/g, ''), 10);
       return Number.isFinite(parsed) ? parsed : 0;
     })

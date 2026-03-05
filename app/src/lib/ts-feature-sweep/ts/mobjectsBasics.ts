@@ -1,7 +1,7 @@
 import { Circle, Create, FadeIn, Scene, Square, TitleText, Wait } from '$lib/feature-sweep/manim-api';
 
 export function buildMobjectsBasicsScene(): Scene {
-  const scene = new Scene(1000);
+  const scene = new Scene(1);
   const label = TitleText('title', {
     x: 400,
     y: 74,

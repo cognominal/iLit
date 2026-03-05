@@ -1,7 +1,7 @@
 import { Circle, Create, Scene, Square, TitleText } from '$lib/feature-sweep/manim-api';
 
 export function buildImagesSvgAssetsScene(): Scene {
-  const scene = new Scene(900);
+  const scene = new Scene(0.9);
   const title = TitleText('title', { x: 400, y: 72, value: 'Images SVG and Assets', fontSize: 34 });
   const asset = Square('square_asset', { x: 262, y: 270, size: 136, stroke: '#22c55e' });
   const fallback = Square('square_fallback', { x: 392, y: 270, size: 92, stroke: '#4ade80' });

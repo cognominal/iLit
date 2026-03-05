@@ -1,7 +1,7 @@
 import { Circle, Create, Scene, Square, TitleText } from '$lib/feature-sweep/manim-api';
 
 export function buildExportProfilesScene(): Scene {
-  const scene = new Scene(700);
+  const scene = new Scene(0.7);
   const title = TitleText('title', { x: 400, y: 72, value: 'Export Profiles', fontSize: 40 });
   const low = Square('square_low', { x: 224, y: 280, size: 76, stroke: '#84cc16' });
   const med = Square('square_med', { x: 344, y: 264, size: 108, stroke: '#65a30d' });

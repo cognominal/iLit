@@ -7,7 +7,7 @@ import {
 } from '$lib/feature-sweep/manim-api';
 
 export function buildPathToPathMorphScene(): Scene {
-  const scene = new Scene(900);
+  const scene = new Scene(0.9);
   const title = TitleText('title', {
     x: 400,
     y: 74,
@@ -45,6 +45,6 @@ export function buildPathToPathMorphScene(): Scene {
   scene.add(title, zig, loop);
   scene.play(Create(title));
   scene.play(Create(zig));
-  scene.play(ReplacementTransform(zig, loop, { runTimeMs: 1300 }));
+  scene.play(ReplacementTransform(zig, loop, { runTime: 1.3 }));
   return scene;
 }

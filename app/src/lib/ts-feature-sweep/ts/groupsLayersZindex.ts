@@ -1,7 +1,7 @@
 import { Circle, Create, Scene, Square, TitleText, Wait } from '$lib/feature-sweep/manim-api';
 
 export function buildGroupsLayersZIndexScene(): Scene {
-  const scene = new Scene(800);
+  const scene = new Scene(0.8);
   const title = TitleText('title', {
     x: 400,
     y: 72,

@@ -3,44 +3,44 @@ export type Mode = 'normal' | 'time-wrap';
 export type TimelineControllerState = {
   mode: Mode;
   isPlaying: boolean;
-  currentTimeMs: number;
+  currentTimeSec: number;
   lastTickMs: number;
-  durationMs: number;
-  frameStepMs: number;
+  durationSec: number;
+  frameStepSec: number;
 };
 
 export type TimelineCommand =
   | { type: 'setMode'; mode: Mode }
-  | { type: 'seek'; timeMs: number }
+  | { type: 'seek'; timeSec: number }
   | { type: 'prev' }
   | { type: 'next' }
   | { type: 'playPause' }
   | { type: 'reset' }
   | { type: 'tick'; nowMs: number };
 
-export function clampTime(t: number, durationMs: number): number {
+export function clampTime(t: number, durationSec: number): number {
   if (t < 0) return 0;
-  if (t > durationMs) return durationMs;
+  if (t > durationSec) return durationSec;
   return t;
 }
 
 export function createTimelineControllerState(
-  durationMs: number,
-  frameStepMs: number,
+  durationSec: number,
+  frameStepSec: number,
 ): TimelineControllerState {
   return {
     mode: 'normal',
     isPlaying: false,
-    currentTimeMs: 0,
+    currentTimeSec: 0,
     lastTickMs: 0,
-    durationMs,
-    frameStepMs,
+    durationSec,
+    frameStepSec,
   };
 }
 
 export function progress01(state: TimelineControllerState): number {
-  if (state.durationMs <= 0) return 0;
-  return state.currentTimeMs / state.durationMs;
+  if (state.durationSec <= 0) return 0;
+  return state.currentTimeSec / state.durationSec;
 }
 
 export function reduceTimelineState(
@@ -60,7 +60,7 @@ export function reduceTimelineState(
       mode: 'time-wrap',
       isPlaying: false,
       lastTickMs: 0,
-      currentTimeMs: clampTime(command.timeMs, state.durationMs),
+      currentTimeSec: clampTime(command.timeSec, state.durationSec),
     };
   }
 
@@ -69,9 +69,9 @@ export function reduceTimelineState(
       ...state,
       mode: 'normal',
       lastTickMs: 0,
-      currentTimeMs: clampTime(
-        state.currentTimeMs - state.frameStepMs,
-        state.durationMs,
+      currentTimeSec: clampTime(
+        state.currentTimeSec - state.frameStepSec,
+        state.durationSec,
       ),
     };
   }
@@ -81,21 +81,21 @@ export function reduceTimelineState(
       ...state,
       mode: 'normal',
       lastTickMs: 0,
-      currentTimeMs: clampTime(
-        state.currentTimeMs + state.frameStepMs,
-        state.durationMs,
+      currentTimeSec: clampTime(
+        state.currentTimeSec + state.frameStepSec,
+        state.durationSec,
       ),
     };
   }
 
   if (command.type === 'playPause') {
     const toggledPlaying = !state.isPlaying;
-    const restartAtStart = toggledPlaying && state.currentTimeMs >= state.durationMs;
+    const restartAtStart = toggledPlaying && state.currentTimeSec >= state.durationSec;
     return {
       ...state,
       mode: 'normal',
       isPlaying: toggledPlaying,
-      currentTimeMs: restartAtStart ? 0 : state.currentTimeMs,
+      currentTimeSec: restartAtStart ? 0 : state.currentTimeSec,
       lastTickMs: 0,
     };
   }
@@ -105,7 +105,7 @@ export function reduceTimelineState(
       ...state,
       mode: 'normal',
       isPlaying: false,
-      currentTimeMs: 0,
+      currentTimeSec: 0,
       lastTickMs: 0,
     };
   }
@@ -117,24 +117,24 @@ export function reduceTimelineState(
 
   if (state.lastTickMs === 0) {
     const nextTime = clampTime(
-      state.currentTimeMs + state.frameStepMs,
-      state.durationMs,
+      state.currentTimeSec + state.frameStepSec,
+      state.durationSec,
     );
     return {
       ...state,
-      currentTimeMs: nextTime,
+      currentTimeSec: nextTime,
       lastTickMs: command.nowMs,
-      isPlaying: nextTime >= state.durationMs ? false : state.isPlaying,
+      isPlaying: nextTime >= state.durationSec ? false : state.isPlaying,
     };
   }
 
-  const delta = command.nowMs - state.lastTickMs;
-  const nextTime = clampTime(state.currentTimeMs + delta, state.durationMs);
+  const deltaSec = (command.nowMs - state.lastTickMs) / 1000;
+  const nextTime = clampTime(state.currentTimeSec + deltaSec, state.durationSec);
 
   return {
     ...state,
-    currentTimeMs: nextTime,
+    currentTimeSec: nextTime,
     lastTickMs: command.nowMs,
-    isPlaying: nextTime >= state.durationMs ? false : state.isPlaying,
+    isPlaying: nextTime >= state.durationSec ? false : state.isPlaying,
   };
 }

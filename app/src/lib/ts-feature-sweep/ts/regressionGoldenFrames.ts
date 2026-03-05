@@ -1,7 +1,7 @@
 import { Circle, Create, Scene, Square, TitleText } from '$lib/feature-sweep/manim-api';
 
 export function buildRegressionGoldenFramesScene(): Scene {
-  const scene = new Scene(700);
+  const scene = new Scene(0.7);
   const title = TitleText('title', { x: 400, y: 72, value: 'Regression Golden Frames', fontSize: 34 });
   const seed = Square('square_seed', { x: 286, y: 280, size: 118, stroke: '#a3e635' });
   const c1 = Circle('circle_seed_1', { x: 500, y: 220, radius: 28, stroke: '#f472b6' });

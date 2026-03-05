@@ -44,7 +44,7 @@ type SceneSpec = {
 function buildScene(
   spec: SceneSpec
 ): Scene {
-  const scene = new Scene(1000);
+  const scene = new Scene(1);
 
   const title = TitleText('title', {
     x: 400,

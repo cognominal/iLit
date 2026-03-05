@@ -44,9 +44,9 @@
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('test') === '1';
 
-  const stepMs = 850;
-  const durationMs = Math.max(0, (previewScene.timeline.length - 1) * stepMs);
-  const initialTimeline = createTimelineControllerState(durationMs, stepMs);
+  const stepSec = 0.85;
+  const durationSec = Math.max(0, (previewScene.timeline.length - 1) * stepSec);
+  const initialTimeline = createTimelineControllerState(durationSec, stepSec);
   if (isTestMode) initialTimeline.isPlaying = false;
   let timeline = $state(initialTimeline);
 
@@ -55,7 +55,7 @@
       0,
       Math.min(
         previewScene.timeline.length - 1,
-        Math.floor(timeline.currentTimeMs / stepMs),
+        Math.floor(timeline.currentTimeSec / stepSec),
       ),
     ),
   );
@@ -87,7 +87,7 @@
 
   function onSliderInput(event: Event): void {
     const target = event.currentTarget as HTMLInputElement;
-    dispatch({ type: 'seek', timeMs: Number(target.value) });
+    dispatch({ type: 'seek', timeSec: Number(target.value) });
   }
 
   $effect(() => {
@@ -137,14 +137,14 @@
           class="w-full"
           type="range"
           min="0"
-          max={timeline.durationMs}
-          step="1"
-          value={timeline.currentTimeMs}
+          max={timeline.durationSec}
+          step="0.01"
+          value={timeline.currentTimeSec}
           oninput={onSliderInput}
           aria-label="Time slider"
         />
         <div class="text-right text-sm tabular-nums text-cyan-300">
-          {Math.round(timeline.currentTimeMs)} ms
+          {timeline.currentTimeSec.toFixed(2)} sec
         </div>
       </div>
       <MatrixTableSvg
