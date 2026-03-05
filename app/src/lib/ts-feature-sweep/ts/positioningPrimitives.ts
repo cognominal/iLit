@@ -14,8 +14,7 @@ import {
   TitleText,
   UL,
   UP,
-  UR,
-  Wait
+  UR
 } from '$lib/manim-api';
 
 export function buildPositioningPrimitivesScene(): Scene {
@@ -102,6 +101,6 @@ export function buildPositioningPrimitivesScene(): Scene {
     Create(corners)
   );
   scene.play(Create(ulDot), Create(drDot), Create(dlDot), Create(depth));
-  scene.play(Wait(900));
+  scene.wait(0.9);
   return scene;
 }

@@ -7,8 +7,7 @@ import {
   Scene,
   Square,
   TitleText,
-  UP,
-  Wait
+  UP
 } from '$lib/manim-api';
 
 export function buildMobjectsBasicsScene(): Scene {
@@ -32,6 +31,6 @@ export function buildMobjectsBasicsScene(): Scene {
   scene.add(label, square, circle);
   scene.play(FadeIn(label));
   scene.play(Create(square), Create(circle));
-  scene.play(Wait(800));
+  scene.wait(0.8);
   return scene;
 }

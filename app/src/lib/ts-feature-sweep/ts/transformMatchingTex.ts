@@ -1,8 +1,7 @@
 import {
   MathTex,
   Scene,
-  TransformMatchingTex,
-  Wait
+  TransformMatchingTex
 } from '$lib/feature-sweep/manim-api';
 
 export function buildTransformMatchingTexScene(): Scene {
@@ -22,6 +21,6 @@ export function buildTransformMatchingTexScene(): Scene {
 
   scene.add(start, end);
   scene.play(...TransformMatchingTex(start, end, { runTime: 1.5 }));
-  scene.play(Wait(0.5));
+  scene.wait(0.5);
   return scene;
 }

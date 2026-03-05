@@ -4,8 +4,7 @@ import {
   Scene,
   Square,
   TitleText,
-  VGroup,
-  Wait
+  VGroup
 } from '$lib/manim-api';
 
 export function buildGroupsLayersZIndexScene(): Scene {
@@ -32,6 +31,6 @@ export function buildGroupsLayersZIndexScene(): Scene {
   scene.add(title, pair);
   scene.play(Create(title));
   scene.play(Create(back), Create(front));
-  scene.play(Wait(800));
+  scene.wait(0.8);
   return scene;
 }

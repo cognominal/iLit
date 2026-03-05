@@ -70,6 +70,9 @@ export type Animation = {
   meta?: Record<string, string | number | boolean | null | undefined>;
 };
 
+type PendingAnimation =
+  Omit<Animation, 'runTime' | 'phase'> & { runTime?: number };
+
 export type ScenePhase = {
   phase: number;
   durationSec: number;
@@ -104,6 +107,10 @@ export class Scene {
       });
     }
     this.phase += 1;
+  }
+
+  wait(runTime: number): void {
+    this.play(Wait(runTime));
   }
 }
 
@@ -231,6 +238,17 @@ function anchorFromDirection(
   };
 }
 
+function translateMobject(mobject: Mobject, dxPx: number, dyPx: number): void {
+  if (mobject.kind === 'group') {
+    const children = mobject.children ?? [];
+    for (const child of children) {
+      translateMobject(child, dxPx, dyPx);
+    }
+  }
+  mobject.x = getMobjectX(mobject) + dxPx;
+  mobject.y = getMobjectY(mobject) + dyPx;
+}
+
 function attachMobjectApi(mobject: Mobject): Mobject {
   mobject.become = (target: Mobject): Mobject => {
     const currentId = mobject.id;
@@ -244,21 +262,39 @@ function attachMobjectApi(mobject: Mobject): Mobject {
       MoveAlongPath(mobject, path, opts),
   };
   mobject.moveTo = (target: PointLike | Mobject): Mobject => {
+    const currentX = getMobjectX(mobject);
+    const currentY = getMobjectY(mobject);
+    let nextX = currentX;
+    let nextY = currentY;
     if ('id' in target) {
-      mobject.x = getMobjectX(target);
-      mobject.y = getMobjectY(target);
+      nextX = getMobjectX(target);
+      nextY = getMobjectY(target);
+    } else {
+      const point = fromPointLike(target);
+      nextX = point.x;
+      nextY = point.y;
+    }
+    const dx = nextX - currentX;
+    const dy = nextY - currentY;
+    if (mobject.kind === 'group') {
+      translateMobject(mobject, dx, dy);
       return mobject;
     }
-    const point = fromPointLike(target);
-    mobject.x = point.x;
-    mobject.y = point.y;
+    mobject.x = nextX;
+    mobject.y = nextY;
     return mobject;
   };
   mobject.move_to = mobject.moveTo;
   mobject.shift = (delta: PointLike): Mobject => {
     const [dx, dy] = asVector(delta);
-    mobject.x = getMobjectX(mobject) + dx * UNIT_PX;
-    mobject.y = getMobjectY(mobject) - dy * UNIT_PX;
+    const dxPx = dx * UNIT_PX;
+    const dyPx = -dy * UNIT_PX;
+    if (mobject.kind === 'group') {
+      translateMobject(mobject, dxPx, dyPx);
+      return mobject;
+    }
+    mobject.x = getMobjectX(mobject) + dxPx;
+    mobject.y = getMobjectY(mobject) + dyPx;
     return mobject;
   };
   mobject.nextTo = (
@@ -609,11 +645,20 @@ export function MathTex(
       token,
       svg,
       html: renderMathTexHtml(token),
+      fallback: svg.svg.includes('<text '),
     };
   });
-  const widths = renderedTokens.map(({ svg, token }) =>
-    Math.max(fontSize * 0.36, (svg.width / 44) * fontSize, token.length * fontSize * 0.2)
-  );
+  const widths = renderedTokens.map(({ svg, token, fallback }) => {
+    const textLen = displayToken(token).length;
+    if (fallback) {
+      return Math.max(fontSize * 0.55, textLen * fontSize * 0.56);
+    }
+    return Math.max(
+      fontSize * 0.36,
+      (svg.width / 44) * fontSize,
+      textLen * fontSize * 0.32
+    );
+  });
   const gap = Math.max(8, fontSize * 0.18);
   const totalWidth =
     widths.reduce((sum, width) => sum + width, 0) +
@@ -829,8 +874,8 @@ export function Create(
   target: Mobject,
   opts?: { runTime?: number }
 ):
-  | (Omit<Animation, 'runTime' | 'phase'> & { runTime?: number })
-  | Array<Omit<Animation, 'runTime' | 'phase'> & { runTime?: number }> {
+  | PendingAnimation
+  | PendingAnimation[] {
   const targets = flattenRenderable(target);
   if (targets.length === 1) {
     return {
@@ -850,8 +895,8 @@ export function FadeIn(
   target: Mobject,
   opts?: { runTime?: number }
 ):
-  | (Omit<Animation, 'runTime' | 'phase'> & { runTime?: number })
-  | Array<Omit<Animation, 'runTime' | 'phase'> & { runTime?: number }> {
+  | PendingAnimation
+  | PendingAnimation[] {
   return Create(target, opts);
 }
 
@@ -859,8 +904,8 @@ export function FadeOut(
   target: Mobject,
   opts?: { runTime?: number }
 ):
-  | (Omit<Animation, 'runTime' | 'phase'> & { runTime?: number })
-  | Array<Omit<Animation, 'runTime' | 'phase'> & { runTime?: number }> {
+  | PendingAnimation
+  | PendingAnimation[] {
   const targets = flattenRenderable(target);
   if (targets.length === 1) {
     return {
@@ -902,7 +947,7 @@ export function TransformMatchingTex(
   source: Mobject,
   target: Mobject,
   opts?: { runTime?: number }
-): Array<Omit<Animation, 'runTime' | 'phase'> & { runTime?: number }> {
+): PendingAnimation[] {
   const runTime = opts?.runTime;
   const sourceParts = flattenRenderable(source);
   const targetParts = flattenRenderable(target);
@@ -922,9 +967,7 @@ export function TransformMatchingTex(
     targetByToken.set(key, list);
   }
 
-  const animations: Array<
-    Omit<Animation, 'runTime' | 'phase'> & { runTime?: number }
-  > = [];
+  const animations: PendingAnimation[] = [];
   const tokenKeys = new Set([
     ...sourceByToken.keys(),
     ...targetByToken.keys(),
@@ -937,13 +980,19 @@ export function TransformMatchingTex(
       animations.push(ReplacementTransform(src[i], dst[i], { runTime }));
     }
     for (let i = matched; i < src.length; i += 1) {
-      animations.push(...[].concat(FadeOut(src[i], { runTime })));
+      animations.push(...toPendingAnimations(FadeOut(src[i], { runTime })));
     }
     for (let i = matched; i < dst.length; i += 1) {
-      animations.push(...[].concat(Create(dst[i], { runTime })));
+      animations.push(...toPendingAnimations(Create(dst[i], { runTime })));
     }
   }
   return animations;
+}
+
+function toPendingAnimations(
+  animation: PendingAnimation | PendingAnimation[]
+): PendingAnimation[] {
+  return Array.isArray(animation) ? animation : [animation];
 }
 
 export function MoveAlongPath(

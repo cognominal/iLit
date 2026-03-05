@@ -4,8 +4,7 @@ import {
   MathTex,
   Scene,
   TitleText,
-  VGroup,
-  Wait
+  VGroup
 } from '$lib/feature-sweep/manim-api';
 
 export function buildTextMathTexScene(): Scene {
@@ -23,6 +22,6 @@ export function buildTextMathTexScene(): Scene {
 
   scene.add(group);
   scene.play(FadeIn(title), FadeIn(formula));
-  scene.play(Wait(0.7));
+  scene.wait(0.7);
   return scene;
 }
