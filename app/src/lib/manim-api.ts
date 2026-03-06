@@ -58,6 +58,7 @@ export type Mobject = {
 export type Animation = {
   kind:
     | 'create'
+    | 'fadeIn'
     | 'wait'
     | 'replacementTransform'
     | 'fadeOut'
@@ -90,7 +91,7 @@ export class Scene {
   }
 
   add(...mobjects: Mobject[]): void {
-    this.mobjects.push(...flattenMobjects(mobjects));
+    this.mobjects.push(...mobjects);
   }
 
   play(...animations: Array<
@@ -137,6 +138,10 @@ function flattenRenderable(mobject: Mobject): Mobject[] {
     return flattenMobjects(mobject.children ?? []);
   }
   return [mobject];
+}
+
+export function flattenSceneMobjects(mobjects: Mobject[]): Mobject[] {
+  return flattenMobjects(mobjects);
 }
 
 const CENTER_X = 400;
@@ -893,11 +898,51 @@ export function Create(
 
 export function FadeIn(
   target: Mobject,
-  opts?: { runTime?: number }
+  opts?: {
+    runTime?: number;
+    shift?: PointLike;
+    targetPosition?: PointLike | Mobject;
+    target_position?: PointLike | Mobject;
+    scale?: number;
+  }
 ):
   | PendingAnimation
   | PendingAnimation[] {
-  return Create(target, opts);
+  const targets = flattenRenderable(target);
+  const targetPosition = opts?.targetPosition ?? opts?.target_position;
+
+  function fadeInAnimation(item: Mobject): PendingAnimation {
+    const meta: Animation['meta'] = {};
+    if (opts?.shift) {
+      const [dx, dy] = asVector(opts.shift);
+      meta.fadeInShiftX = dx * UNIT_PX;
+      meta.fadeInShiftY = -dy * UNIT_PX;
+    }
+    if (targetPosition) {
+      const point = 'id' in targetPosition
+        ? targetPosition.getCenter?.() ?? {
+            x: getMobjectX(targetPosition),
+            y: getMobjectY(targetPosition),
+          }
+        : fromPointLike(targetPosition);
+      meta.fadeInTargetX = point.x;
+      meta.fadeInTargetY = point.y;
+    }
+    if (typeof opts?.scale === 'number') {
+      meta.fadeInScale = opts.scale;
+    }
+    return {
+      kind: 'fadeIn',
+      targetId: item.id,
+      runTime: opts?.runTime,
+      meta: Object.keys(meta).length > 0 ? meta : undefined,
+    };
+  }
+
+  if (targets.length === 1) {
+    return fadeInAnimation(targets[0]);
+  }
+  return targets.map((item) => fadeInAnimation(item));
 }
 
 export function FadeOut(

@@ -1,8 +1,4 @@
-import {
-  MathTex,
-  Scene,
-  TransformMatchingTex
-} from '$lib/manim';
+import { MathTex, Scene, TransformMatchingTex } from '$lib/manim';
 
 export function buildTransformMatchingTexScene(): Scene {
   const scene = new Scene(0.9);

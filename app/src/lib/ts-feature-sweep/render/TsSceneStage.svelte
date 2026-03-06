@@ -5,6 +5,7 @@
     mobjects: Mobject[];
     progressById: Map<string, number>;
     positionsById?: Map<string, { x: number; y: number }>;
+    scaleById?: Map<string, number>;
     replacements?: Array<{
       sourceId: string;
       targetId: string;
@@ -18,6 +19,7 @@
     mobjects,
     progressById,
     positionsById = new Map<string, { x: number; y: number }>(),
+    scaleById = new Map<string, number>(),
     replacements = [],
     completedReplacementSources = new Set<string>(),
     completedReplacementTargets = new Set<string>()
@@ -29,6 +31,18 @@
 
   function posY(mobject: Mobject): number | undefined {
     return positionsById.get(mobject.id)?.y ?? mobject.y;
+  }
+
+  function scaleOf(mobject: Mobject): number {
+    return scaleById.get(mobject.id) ?? 1;
+  }
+
+  function centeredScaleTransform(mobject: Mobject): string | undefined {
+    const scale = scaleOf(mobject);
+    if (Math.abs(scale - 1) < 0.001) return undefined;
+    const x = posX(mobject) ?? 0;
+    const y = posY(mobject) ?? 0;
+    return `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})`;
   }
 
   function strokeDash(progress: number, length: number): string {
@@ -228,6 +242,7 @@
         fill-opacity={drawProgress}
         text-anchor="middle"
         font-size={mobject.fontSize ?? 32}
+        transform={centeredScaleTransform(mobject)}
       >
         {mobject.text}
       </text>
@@ -243,6 +258,7 @@
         width={boxW}
         height={boxH}
         opacity={drawProgress}
+        transform={centeredScaleTransform(mobject)}
       >
         <div
           xmlns="http://www.w3.org/1999/xhtml"
@@ -270,6 +286,7 @@
           height={drawH}
           href={`data:image/svg+xml;utf8,${encodeURIComponent(mobject.texSvg)}`}
           opacity={drawProgress}
+          transform={centeredScaleTransform(mobject)}
         />
       {:else}
         {@const fs = mobject.fontSize ?? 44}
@@ -283,6 +300,7 @@
           width={boxW}
           height={boxH}
           opacity={drawProgress}
+          transform={centeredScaleTransform(mobject)}
         >
           <div
             xmlns="http://www.w3.org/1999/xhtml"
@@ -308,6 +326,7 @@
         stroke-width={mobject.strokeWidth}
         stroke-dasharray={strokeDash(drawProgress, length)}
         stroke-dashoffset={strokeOffset(drawProgress, length)}
+        transform={centeredScaleTransform(mobject)}
       />
     {:else if mobject.kind === 'circle'}
       {@const radius = mobject.radius ?? 0}
@@ -322,6 +341,7 @@
         stroke-width={mobject.strokeWidth}
         stroke-dasharray={strokeDash(drawProgress, length)}
         stroke-dashoffset={strokeOffset(drawProgress, length)}
+        transform={centeredScaleTransform(mobject)}
       />
     {:else if mobject.kind === 'path'}
       {@const points = mobject.points ?? []}
@@ -336,6 +356,7 @@
         stroke-width={mobject.strokeWidth}
         stroke-dasharray={strokeDash(drawProgress, length)}
         stroke-dashoffset={strokeOffsetForward(drawProgress, length)}
+        transform={centeredScaleTransform(mobject)}
       />
     {:else if mobject.kind === 'dot'}
       <circle
@@ -347,6 +368,7 @@
         stroke={mobject.stroke}
         stroke-width={mobject.strokeWidth}
         fill-opacity={drawProgress}
+        transform={centeredScaleTransform(mobject)}
       />
     {/if}
     {/if}

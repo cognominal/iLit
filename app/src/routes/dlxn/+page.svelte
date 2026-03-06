@@ -6,7 +6,7 @@
     type Mode,
     type TimelineCommand
   } from '$lib/feature-sweep/core/timeline-controller';
-  import { scenePhases } from '$lib/manim';
+  import { flattenSceneMobjects, scenePhases } from '$lib/manim';
   import {
     hasOne,
     threeByTwoThreeTilesColumns,
@@ -65,7 +65,7 @@
         if (!step.targetId) continue;
         const raw = (intrinsicTimeSec - phaseStart) / step.runTime;
         const stepProgress = Math.max(0, Math.min(1, raw));
-        if (step.kind === 'create') {
+        if (step.kind === 'create' || step.kind === 'fadeIn') {
           const prev = byId.get(step.targetId) ?? 0;
           byId.set(step.targetId, Math.max(prev, stepProgress));
         }
@@ -82,6 +82,55 @@
     active: [],
     completedSources: new Set<string>(),
     completedTargets: new Set<string>(),
+  });
+  const fadeInState = $derived.by(() => {
+    const positions = new Map<string, { x: number; y: number }>();
+    const scales = new Map<string, number>();
+    const mobjects = flattenSceneMobjects(preview.scene.mobjects);
+    const byId = new Map(mobjects.map((mobject) => [mobject.id, mobject]));
+    let phaseStart = 0;
+
+    for (const phase of scenePhases(preview.scene)) {
+      for (const step of phase.animations) {
+        if (step.kind !== 'fadeIn' || !step.targetId) continue;
+        const mobject = byId.get(step.targetId);
+        if (!mobject) continue;
+        const raw = (intrinsicTimeSec - phaseStart) / step.runTime;
+        const progress = Math.max(0, Math.min(1, raw));
+        const meta = step.meta;
+        const endX = mobject.x ?? 0;
+        const endY = mobject.y ?? 0;
+        let startX = endX;
+        let startY = endY;
+
+        if (
+          typeof meta?.fadeInTargetX === 'number' &&
+          typeof meta?.fadeInTargetY === 'number'
+        ) {
+          startX = meta.fadeInTargetX;
+          startY = meta.fadeInTargetY;
+        }
+        if (typeof meta?.fadeInShiftX === 'number') {
+          startX += meta.fadeInShiftX;
+        }
+        if (typeof meta?.fadeInShiftY === 'number') {
+          startY += meta.fadeInShiftY;
+        }
+
+        positions.set(step.targetId, {
+          x: startX + (endX - startX) * progress,
+          y: startY + (endY - startY) * progress,
+        });
+
+        const startScale = typeof meta?.fadeInScale === 'number'
+          ? meta.fadeInScale
+          : 1;
+        scales.set(step.targetId, startScale + (1 - startScale) * progress);
+      }
+      phaseStart += phase.durationSec;
+    }
+
+    return { positions, scales };
   });
   const durationDeltaSec = $derived(
     durationSec - preview.parity.pyExpectedDurationSec
@@ -223,8 +272,10 @@
 
       <div class="stage-wrap">
         <TsSceneStage
-          mobjects={preview.scene.mobjects}
+          mobjects={flattenSceneMobjects(preview.scene.mobjects)}
           {progressById}
+          positionsById={fadeInState.positions}
+          scaleById={fadeInState.scales}
           replacements={replacementState.active}
           completedReplacementSources={replacementState.completedSources}
           completedReplacementTargets={replacementState.completedTargets}
