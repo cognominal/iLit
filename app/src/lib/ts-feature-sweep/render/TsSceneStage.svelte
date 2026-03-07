@@ -1,5 +1,10 @@
 <script lang="ts">
-  import type { Mobject, Point } from '$lib/manim';
+  import {
+    STAGE_HEIGHT,
+    STAGE_WIDTH,
+    type Mobject,
+    type Point
+  } from '$lib/manim';
 
   type Props = {
     mobjects: Mobject[];
@@ -81,21 +86,29 @@
   function squarePoints(m: Mobject, count: number): Array<{ x: number; y: number }> {
     const cx = m.x ?? 0;
     const cy = m.y ?? 0;
-    const size = m.size ?? 0;
-    const h = size / 2;
-    const perimeter = size * 4;
+    const width = m.width ?? m.size ?? 0;
+    const height = m.height ?? m.size ?? 0;
+    const halfW = width / 2;
+    const halfH = height / 2;
+    const perimeter = width * 2 + height * 2;
     if (perimeter <= 0 || count <= 0) return [];
     const points: Array<{ x: number; y: number }> = [];
     for (let i = 0; i < count; i += 1) {
       const d = (i / count) * perimeter;
-      if (d < size) {
-        points.push({ x: cx - h + d, y: cy - h });
-      } else if (d < size * 2) {
-        points.push({ x: cx + h, y: cy - h + (d - size) });
-      } else if (d < size * 3) {
-        points.push({ x: cx + h - (d - size * 2), y: cy + h });
+      if (d < width) {
+        points.push({ x: cx - halfW + d, y: cy - halfH });
+      } else if (d < width + height) {
+        points.push({ x: cx + halfW, y: cy - halfH + (d - width) });
+      } else if (d < width * 2 + height) {
+        points.push({
+          x: cx + halfW - (d - (width + height)),
+          y: cy + halfH
+        });
       } else {
-        points.push({ x: cx - h, y: cy + h - (d - size * 3) });
+        points.push({
+          x: cx - halfW,
+          y: cy + halfH - (d - (width * 2 + height))
+        });
       }
     }
     return points;
@@ -104,12 +117,13 @@
   function circlePoints(m: Mobject, count: number): Array<{ x: number; y: number }> {
     const cx = m.x ?? 0;
     const cy = m.y ?? 0;
-    const r = m.radius ?? 0;
-    if (r <= 0 || count <= 0) return [];
+    const rx = (m.width ?? (m.radius ?? 0) * 2) / 2;
+    const ry = (m.height ?? (m.radius ?? 0) * 2) / 2;
+    if (rx <= 0 || ry <= 0 || count <= 0) return [];
     const points: Array<{ x: number; y: number }> = [];
     for (let i = 0; i < count; i += 1) {
       const theta = (-Math.PI / 2) + (i / count) * Math.PI * 2;
-      points.push({ x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) });
+      points.push({ x: cx + rx * Math.cos(theta), y: cy + ry * Math.sin(theta) });
     }
     return points;
   }
@@ -220,12 +234,12 @@
 </script>
 
 <svg
-  viewBox="0 0 800 460"
+  viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`}
   role="img"
   aria-label="TS scene stage"
   class="w-full rounded-xl border border-slate-800 bg-slate-950"
 >
-  <rect x="0" y="0" width="800" height="460" fill="#020617" />
+  <rect x="0" y="0" width={STAGE_WIDTH} height={STAGE_HEIGHT} fill="#020617" />
   {#each replacements as replacement (replacement.sourceId + ':' + replacement.targetId)}
     {@const from = mobjects.find((m) => m.id === replacement.sourceId)}
     {@const to = mobjects.find((m) => m.id === replacement.targetId)}
@@ -258,17 +272,45 @@
           ? progress
           : 0.001}
     {#if mobject.kind === 'text'}
+      {@const lines = mobject.textLines ?? (mobject.text ? mobject.text.split('\n') : [])}
+      {@const lineHeight = (mobject.fontSize ?? 32) * 1.2}
+      {@const segments = mobject.textSegments ?? []}
       <text
         id={mobject.id}
         x={posX(mobject)}
         y={posY(mobject)}
         fill={mobject.fill ?? '#e2e8f0'}
         fill-opacity={alphaOf(mobject, drawProgress)}
-        text-anchor="middle"
+        text-anchor={
+          mobject.textAlign === 'left'
+            ? 'start'
+            : mobject.textAlign === 'right'
+              ? 'end'
+              : 'middle'
+        }
         font-size={mobject.fontSize ?? 32}
         transform={centeredScaleTransform(mobject)}
       >
-        {mobject.text}
+        {#if lines.length <= 1}
+          {#if segments.length > 0}
+            {#each segments as segment}
+              <tspan fill={segment.fill ?? (mobject.fill ?? '#e2e8f0')}>
+                {segment.text}
+              </tspan>
+            {/each}
+          {:else}
+            {mobject.text}
+          {/if}
+        {:else}
+          {#each lines as line, index}
+            <tspan
+              x={posX(mobject)}
+              y={(posY(mobject) ?? 0) + (index - (lines.length - 1) / 2) * lineHeight}
+            >
+              {line}
+            </tspan>
+          {/each}
+        {/if}
       </text>
     {:else if mobject.kind === 'kmathtex'}
       {@const fs = mobject.fontSize ?? 44}
@@ -337,14 +379,17 @@
         </foreignObject>
       {/if}
     {:else if mobject.kind === 'square'}
-      {@const size = mobject.size ?? 0}
-      {@const length = size * 4}
+      {@const width = mobject.width ?? mobject.size ?? 0}
+      {@const height = mobject.height ?? mobject.size ?? 0}
+      {@const length = width * 2 + height * 2}
       <rect
         id={mobject.id}
-        x={(posX(mobject) ?? 0) - size / 2}
-        y={(posY(mobject) ?? 0) - size / 2}
-        width={size}
-        height={size}
+        x={(posX(mobject) ?? 0) - width / 2}
+        y={(posY(mobject) ?? 0) - height / 2}
+        width={width}
+        height={height}
+        rx={mobject.cornerRadius ?? 0}
+        ry={mobject.cornerRadius ?? 0}
         fill="none"
         stroke={mobject.stroke}
         stroke-opacity={alphaOf(mobject, drawProgress)}
@@ -354,13 +399,17 @@
         transform={centeredScaleTransform(mobject)}
       />
     {:else if mobject.kind === 'circle'}
-      {@const radius = mobject.radius ?? 0}
-      {@const length = Math.PI * radius * 2}
-      <circle
+      {@const width = mobject.width ?? (mobject.radius ?? 0) * 2}
+      {@const height = mobject.height ?? (mobject.radius ?? 0) * 2}
+      {@const rx = width / 2}
+      {@const ry = height / 2}
+      {@const length = Math.PI * ((3 * (rx + ry)) - Math.sqrt((3 * rx + ry) * (rx + 3 * ry)))}
+      <ellipse
         id={mobject.id}
         cx={posX(mobject)}
         cy={posY(mobject)}
-        r={radius}
+        rx={rx}
+        ry={ry}
         fill="none"
         stroke={mobject.stroke}
         stroke-opacity={alphaOf(mobject, drawProgress)}
@@ -377,7 +426,8 @@
       <path
         id={mobject.id}
         d={d}
-        fill="none"
+        fill={closed ? (mobject.fill ?? 'none') : 'none'}
+        fill-opacity={closed ? alphaOf(mobject, drawProgress) : undefined}
         stroke={mobject.stroke}
         stroke-opacity={alphaOf(mobject, drawProgress)}
         stroke-width={mobject.strokeWidth}

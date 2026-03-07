@@ -22,8 +22,13 @@ export type Mobject = {
   x?: number;
   y?: number;
   size?: number;
+  width?: number;
+  height?: number;
   radius?: number;
+  cornerRadius?: number;
   text?: string;
+  textLines?: string[];
+  textSegments?: Array<{ text: string; fill?: string }>;
   tex?: string;
   texHtml?: string;
   texSvg?: string;
@@ -36,6 +41,8 @@ export type Mobject = {
   stretchY?: number;
   zIndex?: number;
   svgHref?: string;
+  textAlign?: 'left' | 'center' | 'right';
+  bullet?: string;
   points?: Point[];
   closed?: boolean;
   children?: Mobject[];
@@ -362,24 +369,44 @@ export function flattenSceneMobjects(mobjects: Mobject[]): Mobject[] {
   return flattenMobjects(mobjects);
 }
 
-const CENTER_X = 400;
-const CENTER_Y = 240;
 const UNIT_PX = 80;
-const FRAME_X_RADIUS = 5;
-const FRAME_Y_RADIUS = 3;
+const FRAME_X_RADIUS = 7.111111111111111;
+const FRAME_Y_RADIUS = 4;
+export const STAGE_WIDTH = FRAME_X_RADIUS * UNIT_PX * 2;
+export const STAGE_HEIGHT = FRAME_Y_RADIUS * UNIT_PX * 2;
+const CENTER_X = STAGE_WIDTH / 2;
+const CENTER_Y = STAGE_HEIGHT / 2;
 
 function getMobjectX(mobject: Mobject): number {
+  if (mobject.kind === 'group' && (mobject.children?.length ?? 0) > 0) {
+    const bounds = mobjectBounds(mobject);
+    return (bounds.left + bounds.right) / 2;
+  }
+  if (mobject.points && mobject.points.length > 0) {
+    const xs = mobject.points.map((point) => point.x);
+    return (Math.min(...xs) + Math.max(...xs)) / 2;
+  }
+  if (typeof mobject.x === 'number') return mobject.x;
   return mobject.x ?? CENTER_X;
 }
 
 function getMobjectY(mobject: Mobject): number {
+  if (mobject.kind === 'group' && (mobject.children?.length ?? 0) > 0) {
+    const bounds = mobjectBounds(mobject);
+    return (bounds.top + bounds.bottom) / 2;
+  }
+  if (mobject.points && mobject.points.length > 0) {
+    const ys = mobject.points.map((point) => point.y);
+    return (Math.min(...ys) + Math.max(...ys)) / 2;
+  }
+  if (typeof mobject.y === 'number') return mobject.y;
   return mobject.y ?? CENTER_Y;
 }
 
 function estimateTextWidth(mobject: Mobject): number {
   const text = mobject.text ?? '';
   const fontSize = mobject.fontSize ?? 32;
-  return Math.max(fontSize * 0.6, text.length * fontSize * 0.56);
+  return Math.max(fontSize * 0.7, text.length * fontSize * 0.62);
 }
 
 function estimateTextHeight(mobject: Mobject): number {
@@ -412,12 +439,34 @@ function mobjectBounds(mobject: Mobject): {
   const x = getMobjectX(mobject);
   const y = getMobjectY(mobject);
   if (mobject.kind === 'square') {
-    const half = (mobject.size ?? 0) / 2;
-    return { left: x - half, right: x + half, top: y - half, bottom: y + half };
+    const halfW = (mobject.width ?? mobject.size ?? 0) / 2;
+    const halfH = (mobject.height ?? mobject.size ?? 0) / 2;
+    return {
+      left: x - halfW,
+      right: x + halfW,
+      top: y - halfH,
+      bottom: y + halfH
+    };
+  }
+  if (mobject.kind === 'svg') {
+    const halfW = (mobject.width ?? mobject.size ?? 0) / 2;
+    const halfH = (mobject.height ?? mobject.radius ?? 0) / 2;
+    return {
+      left: x - halfW,
+      right: x + halfW,
+      top: y - halfH,
+      bottom: y + halfH
+    };
   }
   if (mobject.kind === 'circle' || mobject.kind === 'dot') {
-    const r = mobject.radius ?? 0;
-    return { left: x - r, right: x + r, top: y - r, bottom: y + r };
+    const halfW = (mobject.width ?? (mobject.radius ?? 0) * 2) / 2;
+    const halfH = (mobject.height ?? (mobject.radius ?? 0) * 2) / 2;
+    return {
+      left: x - halfW,
+      right: x + halfW,
+      top: y - halfH,
+      bottom: y + halfH
+    };
   }
   if (mobject.kind === 'path') {
     const points = mobject.points ?? [];
@@ -427,6 +476,18 @@ function mobjectBounds(mobject: Mobject): {
       right: Math.max(...points.map((p) => p.x)),
       top: Math.min(...points.map((p) => p.y)),
       bottom: Math.max(...points.map((p) => p.y)),
+    };
+  }
+  if (mobject.kind === 'kmathtex' || mobject.kind === 'mathtex') {
+    const fontSize = mobject.fontSize ?? 44;
+    const texLen = (mobject.tex ?? mobject.text ?? '').length;
+    const halfW = Math.max(fontSize * 0.7, texLen * fontSize * 0.62) / 2;
+    const halfH = (fontSize * 1.9) / 2;
+    return {
+      left: x - halfW,
+      right: x + halfW,
+      top: y - halfH,
+      bottom: y + halfH
     };
   }
   const halfW = estimateTextWidth(mobject) / 2;
@@ -467,6 +528,12 @@ function translateMobject(mobject: Mobject, dxPx: number, dyPx: number): void {
     for (const child of children) {
       translateMobject(child, dxPx, dyPx);
     }
+  }
+  if (mobject.points) {
+    mobject.points = mobject.points.map((point) => ({
+      x: point.x + dxPx,
+      y: point.y + dyPx,
+    }));
   }
   mobject.x = getMobjectX(mobject) + dxPx;
   mobject.y = getMobjectY(mobject) + dyPx;
@@ -598,6 +665,12 @@ function attachMobjectApi(mobject: Mobject): Mobject {
       translateMobject(mobject, dx, dy);
       return mobject;
     }
+    if (mobject.points) {
+      mobject.points = mobject.points.map((point) => ({
+        x: point.x + dx,
+        y: point.y + dy,
+      }));
+    }
     mobject.x = nextX;
     mobject.y = nextY;
     return mobject;
@@ -617,17 +690,37 @@ function attachMobjectApi(mobject: Mobject): Mobject {
   };
   mobject.scale = (factor: number): Mobject => {
     mobject.scaleFactor = (mobject.scaleFactor ?? 1) * factor;
+    if (mobject.kind === 'group') {
+      const groupCenter = mobject.getCenter?.() ?? {
+        x: getMobjectX(mobject),
+        y: getMobjectY(mobject)
+      };
+      for (const child of mobject.children ?? []) {
+        const childCenter = child.getCenter?.() ?? {
+          x: getMobjectX(child),
+          y: getMobjectY(child)
+        };
+        child.scale?.(factor);
+        child.moveTo?.({
+          x: groupCenter.x + (childCenter.x - groupCenter.x) * factor,
+          y: groupCenter.y + (childCenter.y - groupCenter.y) * factor
+        });
+      }
+      return mobject;
+    }
     if (typeof mobject.size === 'number') mobject.size *= factor;
     if (typeof mobject.radius === 'number') mobject.radius *= factor;
+    if (typeof mobject.width === 'number') mobject.width *= factor;
+    if (typeof mobject.height === 'number') mobject.height *= factor;
+    if (typeof mobject.cornerRadius === 'number') {
+      mobject.cornerRadius *= factor;
+    }
     if (mobject.points) {
       const center = mobject.getCenter?.() ?? { x: getMobjectX(mobject), y: getMobjectY(mobject) };
       mobject.points = mobject.points.map((point) => ({
         x: center.x + (point.x - center.x) * factor,
         y: center.y + (point.y - center.y) * factor,
       }));
-    }
-    if (mobject.children) {
-      mobject.children.forEach((child) => child.scale?.(factor));
     }
     return mobject;
   };
@@ -716,31 +809,82 @@ function attachMobjectApi(mobject: Mobject): Mobject {
     buff = 0.5
   ): Mobject => {
     const [dx, dy] = asVector(direction);
-    const gapPx = (1 + buff) * UNIT_PX;
-    mobject.x = getMobjectX(target) + Math.sign(dx) * gapPx;
-    mobject.y = getMobjectY(target) - Math.sign(dy) * gapPx;
+    const signX = Math.sign(dx);
+    const signY = Math.sign(dy);
+    const gapPx = buff * UNIT_PX;
+    const targetBounds = mobjectBounds(target);
+    const selfBounds = mobjectBounds(mobject);
+    const selfWidth = selfBounds.right - selfBounds.left;
+    const selfHeight = selfBounds.bottom - selfBounds.top;
+
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      const centerY = (targetBounds.top + targetBounds.bottom) / 2;
+      const x = signX >= 0
+        ? targetBounds.right + gapPx + selfWidth / 2
+        : targetBounds.left - gapPx - selfWidth / 2;
+      mobject.moveTo?.({ x, y: centerY });
+      return mobject;
+    }
+
+    const centerX = (targetBounds.left + targetBounds.right) / 2;
+    const y = signY >= 0
+      ? targetBounds.top - gapPx - selfHeight / 2
+      : targetBounds.bottom + gapPx + selfHeight / 2;
+    mobject.moveTo?.({ x: centerX, y });
     return mobject;
   };
   mobject.next_to = mobject.nextTo;
   mobject.toEdge = (direction: PointLike, buff = 0.5): Mobject => {
-    const point = anchorFromDirection(direction, buff);
-    mobject.x = point.x;
-    mobject.y = point.y;
+    const [dx, dy] = asVector(direction);
+    const bounds = mobjectBounds(mobject);
+    const center = {
+      x: (bounds.left + bounds.right) / 2,
+      y: (bounds.top + bounds.bottom) / 2,
+    };
+    let targetX = center.x;
+    let targetY = center.y;
+
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      const edgeX = CENTER_X + Math.sign(dx || 1) * (FRAME_X_RADIUS - buff) * UNIT_PX;
+      const halfWidth = (bounds.right - bounds.left) / 2;
+      targetX = edgeX - Math.sign(dx || 1) * halfWidth;
+    } else {
+      const edgeY = CENTER_Y - Math.sign(dy || 1) * (FRAME_Y_RADIUS - buff) * UNIT_PX;
+      const halfHeight = (bounds.bottom - bounds.top) / 2;
+      targetY = edgeY + Math.sign(dy || 1) * halfHeight;
+    }
+
+    mobject.moveTo?.({ x: targetX, y: targetY });
     return mobject;
   };
   mobject.to_edge = mobject.toEdge;
   mobject.toCorner = (corner: PointLike, buff = 0.5): Mobject => {
-    const point = anchorFromDirection(corner, buff);
-    mobject.x = point.x;
-    mobject.y = point.y;
+    const [dx, dy] = asVector(corner);
+    const bounds = mobjectBounds(mobject);
+    const halfWidth = (bounds.right - bounds.left) / 2;
+    const halfHeight = (bounds.bottom - bounds.top) / 2;
+    const edgeX = CENTER_X + Math.sign(dx || 1) * (FRAME_X_RADIUS - buff) * UNIT_PX;
+    const edgeY = CENTER_Y - Math.sign(dy || 1) * (FRAME_Y_RADIUS - buff) * UNIT_PX;
+    mobject.moveTo?.({
+      x: edgeX - Math.sign(dx || 1) * halfWidth,
+      y: edgeY + Math.sign(dy || 1) * halfHeight,
+    });
     return mobject;
   };
   mobject.to_corner = mobject.toCorner;
   mobject.alignTo = (target: Mobject, direction: PointLike): Mobject => {
+    const current = mobjectBounds(mobject);
+    const targetBounds = mobjectBounds(target);
     if (directionAxis(direction) === 'x') {
-      mobject.x = getMobjectX(target);
+      mobject.moveTo?.({
+        x: (targetBounds.left + targetBounds.right) / 2,
+        y: (current.top + current.bottom) / 2,
+      });
     } else {
-      mobject.y = getMobjectY(target);
+      mobject.moveTo?.({
+        x: (current.left + current.right) / 2,
+        y: (targetBounds.top + targetBounds.bottom) / 2,
+      });
     }
     return mobject;
   };
@@ -806,8 +950,12 @@ function attachMobjectApi(mobject: Mobject): Mobject {
     const height = bounds.bottom - bounds.top + buff * 2;
     if (mobject.kind === 'square') {
       mobject.size = Math.max(width, height);
+      mobject.width = width;
+      mobject.height = height;
     } else if (mobject.kind === 'circle') {
       mobject.radius = Math.max(width, height) / 2;
+      mobject.width = width;
+      mobject.height = height;
     }
     return mobject;
   };
@@ -897,8 +1045,8 @@ function fromPointLike(value: PointLike): Point {
   if (isPoint(value)) return value;
   const [mx, my] = value;
   return {
-    x: 400 + mx * 80,
-    y: 240 - my * 80,
+    x: CENTER_X + mx * UNIT_PX,
+    y: CENTER_Y - my * UNIT_PX,
   };
 }
 
@@ -953,10 +1101,80 @@ export function Square(
     x: opts.x ?? CENTER_X,
     y: opts.y ?? CENTER_Y,
     size: opts.size,
+    width: opts.size,
+    height: opts.size,
     stroke: opts.stroke,
     strokeWidth: opts.strokeWidth ?? 8,
     fill: 'none',
   });
+}
+
+export function Rectangle(
+  idOrOpts: string | {
+    id?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    stroke?: string;
+    strokeWidth?: number;
+    color?: Color;
+  },
+  maybeOpts?: {
+    id?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    stroke?: string;
+    strokeWidth?: number;
+    color?: Color;
+  }
+): Mobject {
+  const id = typeof idOrOpts === 'string' ? idOrOpts : autoId('rectangle');
+  const opts = (typeof idOrOpts === 'string' ? maybeOpts : idOrOpts) ?? {};
+  const color = opts.color ?? opts.stroke ?? '#e2e8f0';
+  return attachMobjectApi({
+    id,
+    kind: 'square',
+    x: opts.x ?? CENTER_X,
+    y: opts.y ?? CENTER_Y,
+    width: opts.width ?? 140,
+    height: opts.height ?? 84,
+    stroke: color,
+    strokeWidth: opts.strokeWidth ?? 8,
+    fill: 'none',
+  });
+}
+
+export function RoundedRectangle(
+  idOrOpts: string | {
+    id?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    cornerRadius?: number;
+    stroke?: string;
+    strokeWidth?: number;
+    color?: Color;
+  },
+  maybeOpts?: {
+    id?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    cornerRadius?: number;
+    stroke?: string;
+    strokeWidth?: number;
+    color?: Color;
+  }
+): Mobject {
+  const rectangle = Rectangle(idOrOpts as never, maybeOpts as never);
+  const opts = (typeof idOrOpts === 'string' ? maybeOpts : idOrOpts) ?? {};
+  rectangle.cornerRadius = opts.cornerRadius ?? 18;
+  return rectangle;
 }
 
 export function Circle(
@@ -983,9 +1201,48 @@ export function Circle(
   return attachMobjectApi({
     id,
     kind: 'circle',
-    x: opts.x ?? 400,
-    y: opts.y ?? 240,
+    x: opts.x ?? CENTER_X,
+    y: opts.y ?? CENTER_Y,
     radius: opts.radius ?? 48,
+    stroke: color,
+    strokeWidth: opts.strokeWidth ?? 8,
+    fill: 'none',
+  });
+}
+
+export function Ellipse(
+  idOrOpts: string | {
+    id?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    stroke?: string;
+    strokeWidth?: number;
+    color?: Color;
+  },
+  maybeOpts?: {
+    id?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    stroke?: string;
+    strokeWidth?: number;
+    color?: Color;
+  }
+): Mobject {
+  const id = typeof idOrOpts === 'string' ? idOrOpts : autoId('ellipse');
+  const opts = (typeof idOrOpts === 'string' ? maybeOpts : idOrOpts) ?? {};
+  const color = opts.color ?? opts.stroke ?? '#e2e8f0';
+  return attachMobjectApi({
+    id,
+    kind: 'circle',
+    x: opts.x ?? CENTER_X,
+    y: opts.y ?? CENTER_Y,
+    width: opts.width ?? 160,
+    height: opts.height ?? 96,
+    radius: Math.max(opts.width ?? 160, opts.height ?? 96) / 2,
     stroke: color,
     strokeWidth: opts.strokeWidth ?? 8,
     fill: 'none',
@@ -1041,8 +1298,8 @@ export function Dot(
       : undefined);
   const merged = { ...inlineOpts, ...opts };
   const color = merged?.color ?? merged?.fill ?? merged?.stroke ?? '#e2e8f0';
-  const x = point?.x ?? merged?.x ?? 400;
-  const y = point?.y ?? merged?.y ?? 240;
+  const x = point?.x ?? merged?.x ?? CENTER_X;
+  const y = point?.y ?? merged?.y ?? CENTER_Y;
   return attachMobjectApi({
     id,
     kind: 'dot',
@@ -1090,9 +1347,11 @@ export function Text(
     stroke?: string;
     fill?: string;
     fontSize?: number;
+    width?: number;
+    textAlign?: 'left' | 'center' | 'right';
   }
 ): Mobject {
-  return TitleText(opts?.id ?? autoId('text'), {
+  const text = TitleText(opts?.id ?? autoId('text'), {
     x: opts?.x,
     y: opts?.y,
     value,
@@ -1100,6 +1359,194 @@ export function Text(
     fill: opts?.fill,
     fontSize: opts?.fontSize ?? 36,
   });
+  text.width = opts?.width;
+  text.textAlign = opts?.textAlign ?? 'center';
+  return text;
+}
+
+export function MarkupText(
+  value: string,
+  opts?: {
+    id?: string;
+    x?: number;
+    y?: number;
+    fontSize?: number;
+    fill?: string;
+    stroke?: string;
+  }
+): Mobject {
+  const segments: Array<{ text: string; fill?: string }> = [];
+  const spanPattern = /<span\s+fgcolor="([^"]+)">([\s\S]*?)<\/span>/gi;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = spanPattern.exec(value)) !== null) {
+    if (match.index > cursor) {
+      segments.push({
+        text: value.slice(cursor, match.index).replace(/<[^>]+>/g, '')
+      });
+    }
+    segments.push({
+      text: match[2]?.replace(/<[^>]+>/g, '') ?? '',
+      fill: match[1]
+    });
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < value.length) {
+    segments.push({
+      text: value.slice(cursor).replace(/<[^>]+>/g, '')
+    });
+  }
+  const text = Text(
+    segments.map((segment) => segment.text).join(''),
+    opts
+  );
+  text.textSegments = segments;
+  return text;
+}
+
+export function Paragraph(
+  ...args: Array<
+    string | {
+      id?: string;
+      x?: number;
+      y?: number;
+      fontSize?: number;
+      fill?: string;
+      stroke?: string;
+      lineSpacing?: number;
+      alignment?: 'left' | 'center' | 'right';
+    }
+  >
+): Mobject {
+  const maybeOpts = args[args.length - 1];
+  const hasOpts = typeof maybeOpts === 'object' && maybeOpts !== null;
+  const opts = (hasOpts ? maybeOpts : {}) as {
+    id?: string;
+    x?: number;
+    y?: number;
+    fontSize?: number;
+    fill?: string;
+    stroke?: string;
+    lineSpacing?: number;
+    alignment?: 'left' | 'center' | 'right';
+  };
+  const lines = (hasOpts ? args.slice(0, -1) : args) as string[];
+  const fontSize = opts.fontSize ?? 32;
+  const spacing = opts.lineSpacing ?? fontSize * 1.4;
+  const children = lines.map((line, index) =>
+    Text(line, {
+      id: `${opts.id ?? autoId('paragraph')}_line_${index}`,
+      x: opts.x ?? CENTER_X,
+      y: (opts.y ?? CENTER_Y) + (index - (lines.length - 1) / 2) * spacing,
+      fontSize,
+      fill: opts.fill,
+      stroke: opts.stroke,
+      textAlign: opts.alignment ?? 'center',
+    })
+  );
+  return attachMobjectApi({
+    id: opts.id ?? autoId('paragraph'),
+    kind: 'group',
+    children,
+    stroke: 'none',
+    strokeWidth: 0,
+  });
+}
+
+export function Title(
+  value: string,
+  opts?: {
+    id?: string;
+    includeUnderline?: boolean;
+    matchUnderlineWidthToText?: boolean;
+    fontSize?: number;
+    color?: Color;
+  }
+): Mobject {
+  const title = Text(value, {
+    id: opts?.id ?? autoId('title'),
+    fontSize: opts?.fontSize ?? 42,
+    fill: opts?.color,
+  }).toEdge!(UP, 0.5);
+  if (opts?.includeUnderline === false) {
+    return title;
+  }
+  const underline = Underline(title, {
+    id: `${title.id}_underline`,
+    color: opts?.color,
+  });
+  return VGroup(`${title.id}_group`, title, underline);
+}
+
+export function BulletedList(
+  ...items: Array<
+    string | {
+      id?: string;
+      x?: number;
+      y?: number;
+      fontSize?: number;
+      color?: Color;
+      bullet?: string;
+    }
+  >
+): Mobject {
+  const maybeOpts = items[items.length - 1];
+  const hasOpts = typeof maybeOpts === 'object' && maybeOpts !== null;
+  const opts = (hasOpts ? maybeOpts : {}) as {
+    id?: string;
+    x?: number;
+    y?: number;
+    fontSize?: number;
+    color?: Color;
+    bullet?: string;
+  };
+  const lines = (hasOpts ? items.slice(0, -1) : items) as string[];
+  return Paragraph(
+    ...lines.map((line) => `${opts.bullet ?? '•'} ${line}`),
+    {
+      id: opts.id ?? autoId('bulleted_list'),
+      x: opts.x,
+      y: opts.y,
+      fontSize: opts.fontSize ?? 30,
+      fill: opts.color,
+      alignment: 'left',
+    }
+  );
+}
+
+export function registerFont(_name: string, _url?: string): void {
+  // Local stub for CE-like API coverage. No font loader yet.
+}
+
+export function Tex(
+  idOrTex: string,
+  texOrOpts?: string | {
+    x?: number;
+    y?: number;
+    fontSize?: number;
+    color?: Color;
+    fill?: string;
+    stroke?: string;
+    texTemplate?: string;
+  },
+  maybeOpts?: {
+    x?: number;
+    y?: number;
+    fontSize?: number;
+    color?: Color;
+    fill?: string;
+    stroke?: string;
+    texTemplate?: string;
+  }
+): Mobject {
+  const hasId = typeof texOrOpts === 'string';
+  const id = hasId ? idOrTex : autoId('tex');
+  const tex = hasId ? (texOrOpts as string) : idOrTex;
+  const opts = (hasId ? maybeOpts : texOrOpts) ?? {};
+  const normalized = tex
+    .replace(/^\$/, '')
+    .replace(/\$$/, '');
+  return KMathTex(id, normalized, opts);
 }
 
 import { renderMathTexHtml } from '$lib/feature-sweep/mathtex';
@@ -1132,8 +1579,8 @@ export function KMathTex(
   return attachMobjectApi({
     id,
     kind: 'kmathtex',
-    x: opts.x ?? 400,
-    y: opts.y ?? 240,
+    x: opts.x ?? CENTER_X,
+    y: opts.y ?? CENTER_Y,
     tex,
     texHtml: renderMathTexHtml(tex),
     text: tex,
@@ -1238,6 +1685,7 @@ export function Path(
     stroke: string;
     strokeWidth?: number;
     closed?: boolean;
+    fill?: string;
   }
 ): Mobject {
   return attachMobjectApi({
@@ -1246,8 +1694,164 @@ export function Path(
     points: opts.points,
     stroke: opts.stroke,
     strokeWidth: opts.strokeWidth ?? 8,
-    fill: 'none',
+    fill: opts.fill ?? 'none',
     closed: opts.closed ?? true
+  });
+}
+
+export function Polygon(
+  ...args: Array<
+    string | PointLike | {
+      stroke?: string;
+      color?: Color;
+      strokeWidth?: number;
+      fill?: string;
+      fillOpacity?: number;
+    }
+  >
+): Mobject {
+  const first = args[0];
+  const hasId = typeof first === 'string';
+  const id = hasId ? (first as string) : autoId('polygon');
+  const tail = hasId ? args.slice(1) : args;
+  const maybeOpts = tail[tail.length - 1];
+  const hasOpts = typeof maybeOpts === 'object' &&
+    maybeOpts !== null &&
+    !isPoint(maybeOpts) &&
+    !isTuple(maybeOpts);
+  const opts = (hasOpts ? maybeOpts : {}) as {
+    stroke?: string;
+    color?: Color;
+    strokeWidth?: number;
+    fill?: string;
+    fillOpacity?: number;
+  };
+  const vertices = (hasOpts ? tail.slice(0, -1) : tail) as PointLike[];
+  const points = vertices.map((vertex) => fromPointLike(vertex));
+  return attachMobjectApi({
+    id,
+    kind: 'path',
+    points,
+    closed: true,
+    stroke: opts.color ?? opts.stroke ?? '#e2e8f0',
+    strokeWidth: opts.strokeWidth ?? 6,
+    fill: opts.fill ?? 'none',
+    opacity: opts.fillOpacity ?? 1,
+  });
+}
+
+export function Triangle(
+  idOrOpts?: string | {
+    x?: number;
+    y?: number;
+    size?: number;
+    stroke?: string;
+    color?: Color;
+    strokeWidth?: number;
+  },
+  maybeOpts?: {
+    x?: number;
+    y?: number;
+    size?: number;
+    stroke?: string;
+    color?: Color;
+    strokeWidth?: number;
+  }
+): Mobject {
+  const id = typeof idOrOpts === 'string' ? idOrOpts : autoId('triangle');
+  const opts = (typeof idOrOpts === 'string' ? maybeOpts : idOrOpts) ?? {};
+  const radius = (opts.size ?? 120) / Math.sqrt(3);
+  return RegularPolygon(3, {
+    id,
+    x: opts.x,
+    y: opts.y,
+    radius,
+    color: opts.color ?? opts.stroke,
+    strokeWidth: opts.strokeWidth
+  });
+}
+
+export function RegularPolygon(
+  n: number,
+  opts?: {
+    id?: string;
+    x?: number;
+    y?: number;
+    radius?: number;
+    stroke?: string;
+    color?: Color;
+    strokeWidth?: number;
+  }
+): Mobject {
+  const radius = opts?.radius ?? 60;
+  const cx = opts?.x ?? CENTER_X;
+  const cy = opts?.y ?? CENTER_Y;
+  const points: Point[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const theta = (Math.PI / 2) + (i / n) * Math.PI * 2;
+    points.push({
+      x: cx + radius * Math.cos(theta),
+      y: cy - radius * Math.sin(theta),
+    });
+  }
+  return attachMobjectApi({
+    id: opts?.id ?? autoId('regular_polygon'),
+    kind: 'path',
+    points,
+    closed: true,
+    stroke: opts?.color ?? opts?.stroke ?? '#e2e8f0',
+    strokeWidth: opts?.strokeWidth ?? 6,
+    fill: 'none',
+  });
+}
+
+export function Arc(
+  idOrOpts?: string | {
+    id?: string;
+    x?: number;
+    y?: number;
+    radius?: number;
+    startAngle?: number;
+    angle?: number;
+    stroke?: string;
+    color?: Color;
+    strokeWidth?: number;
+    samples?: number;
+  },
+  maybeOpts?: {
+    id?: string;
+    x?: number;
+    y?: number;
+    radius?: number;
+    startAngle?: number;
+    angle?: number;
+    stroke?: string;
+    color?: Color;
+    strokeWidth?: number;
+    samples?: number;
+  }
+): Mobject {
+  const id = typeof idOrOpts === 'string' ? idOrOpts : autoId('arc');
+  const opts = (typeof idOrOpts === 'string' ? maybeOpts : idOrOpts) ?? {};
+  const radius = opts.radius ?? 60;
+  const cx = opts.x ?? CENTER_X;
+  const cy = opts.y ?? CENTER_Y;
+  const start = opts.startAngle ?? 0;
+  const angle = opts.angle ?? Math.PI / 2;
+  const samples = Math.max(8, opts.samples ?? 48);
+  const points: Point[] = [];
+  for (let i = 0; i <= samples; i += 1) {
+    const theta = start + (angle * i) / samples;
+    points.push({
+      x: cx + radius * Math.cos(theta),
+      y: cy - radius * Math.sin(theta),
+    });
+  }
+  return Path(id, {
+    points,
+    closed: false,
+    stroke: opts.color ?? opts.stroke ?? '#e2e8f0',
+    strokeWidth: opts.strokeWidth ?? 6,
   });
 }
 
@@ -1268,6 +1872,60 @@ export function Line(
     strokeWidth: opts?.strokeWidth ?? 6,
     closed: false,
   });
+}
+
+export function Arrow(
+  start: PointLike,
+  end: PointLike,
+  opts?: {
+    id?: string;
+    stroke?: string;
+    color?: Color;
+    strokeWidth?: number;
+    tipLength?: number;
+  }
+): Mobject {
+  const id = opts?.id ?? autoId('arrow');
+  const color = opts?.color ?? opts?.stroke ?? '#e2e8f0';
+  const a = fromPointLike(start);
+  const b = fromPointLike(end);
+  const angle = Math.atan2(b.y - a.y, b.x - a.x);
+  const tipLength = opts?.tipLength ?? 18;
+  const left = {
+    x: b.x - tipLength * Math.cos(angle - Math.PI / 6),
+    y: b.y - tipLength * Math.sin(angle - Math.PI / 6),
+  };
+  const right = {
+    x: b.x - tipLength * Math.cos(angle + Math.PI / 6),
+    y: b.y - tipLength * Math.sin(angle + Math.PI / 6),
+  };
+  return VGroup(
+    id,
+    Line(start, end, {
+      id: `${id}_shaft`,
+      color,
+      strokeWidth: opts?.strokeWidth ?? 6,
+    }),
+    Path(`${id}_tip`, {
+      points: [left, b, right],
+      stroke: color,
+      fill: color,
+      strokeWidth: opts?.strokeWidth ?? 6,
+      closed: true,
+    })
+  );
+}
+
+export function Vector(
+  direction: PointLike,
+  opts?: {
+    id?: string;
+    color?: Color;
+    stroke?: string;
+    strokeWidth?: number;
+  }
+): Mobject {
+  return Arrow(ORIGIN, direction, opts);
 }
 
 function cubicBezierPoint(
@@ -1394,6 +2052,8 @@ export function SVGMobject(
     y: opts?.y ?? CENTER_Y,
     size: opts?.width ?? 120,
     radius: opts?.height ?? 120,
+    width: opts?.width ?? 120,
+    height: opts?.height ?? 120,
     stroke: 'none',
     strokeWidth: 0,
     opacity: opts?.opacity ?? 1,
@@ -1403,6 +2063,134 @@ export function SVGMobject(
 
 export function always_redraw(factory: () => Mobject): Mobject {
   return factory();
+}
+
+export function SurroundingRectangle(
+  target: Mobject,
+  opts?: {
+    id?: string;
+    buff?: number;
+    color?: Color;
+    stroke?: string;
+    strokeWidth?: number;
+    cornerRadius?: number;
+  }
+): Mobject {
+  const cornerRadius = opts?.cornerRadius ?? 0;
+  const rectangle = cornerRadius > 0
+    ? RoundedRectangle({
+        id: opts?.id ?? autoId('surrounding_rectangle'),
+        color: opts?.color ?? opts?.stroke,
+        strokeWidth: opts?.strokeWidth,
+        cornerRadius,
+      })
+    : Rectangle({
+        id: opts?.id ?? autoId('surrounding_rectangle'),
+        color: opts?.color ?? opts?.stroke,
+        strokeWidth: opts?.strokeWidth,
+      });
+  rectangle.surround?.(target, opts?.buff ?? 12);
+  return rectangle;
+}
+
+export function Underline(
+  target: Mobject,
+  opts?: {
+    id?: string;
+    color?: Color;
+    stroke?: string;
+    strokeWidth?: number;
+    buff?: number;
+  }
+): Mobject {
+  const bounds = mobjectBounds(target);
+  const y = bounds.bottom + (opts?.buff ?? 4);
+  return Line(
+    { x: bounds.left, y },
+    { x: bounds.right, y },
+    {
+      id: opts?.id ?? autoId('underline'),
+      color: opts?.color ?? opts?.stroke ?? target.stroke,
+      strokeWidth: opts?.strokeWidth ?? 4,
+    }
+  );
+}
+
+export function Cross(
+  target: Mobject,
+  opts?: {
+    id?: string;
+    color?: Color;
+    stroke?: string;
+    strokeWidth?: number;
+  }
+): Mobject {
+  const bounds = mobjectBounds(target);
+  return VGroup(
+    opts?.id ?? autoId('cross'),
+    Line(
+      { x: bounds.left, y: bounds.top },
+      { x: bounds.right, y: bounds.bottom },
+      {
+        color: opts?.color ?? opts?.stroke ?? '#e11d48',
+        strokeWidth: opts?.strokeWidth ?? 6,
+      }
+    ),
+    Line(
+      { x: bounds.right, y: bounds.top },
+      { x: bounds.left, y: bounds.bottom },
+      {
+        color: opts?.color ?? opts?.stroke ?? '#e11d48',
+        strokeWidth: opts?.strokeWidth ?? 6,
+      }
+    )
+  );
+}
+
+export function Brace(
+  target: Mobject,
+  opts?: {
+    id?: string;
+    direction?: PointLike;
+    color?: Color;
+    stroke?: string;
+    strokeWidth?: number;
+    buff?: number;
+  }
+): Mobject {
+  const bounds = mobjectBounds(target);
+  const direction = opts?.direction ?? DOWN;
+  const axis = directionAxis(direction);
+  const buff = opts?.buff ?? 8;
+  if (axis === 'x') {
+    const x = Math.sign(asVector(direction)[0]) >= 0 ? bounds.right + buff : bounds.left - buff;
+    return Path(opts?.id ?? autoId('brace'), {
+      points: [
+        { x, y: bounds.top },
+        { x: x + Math.sign(asVector(direction)[0]) * 10, y: (bounds.top + bounds.bottom) / 2 },
+        { x, y: bounds.bottom },
+      ],
+      closed: false,
+      stroke: opts?.color ?? opts?.stroke ?? '#e2e8f0',
+      strokeWidth: opts?.strokeWidth ?? 5,
+    });
+  }
+  const y = Math.sign(asVector(direction)[1]) >= 0 ? bounds.top - buff : bounds.bottom + buff;
+  return Path(opts?.id ?? autoId('brace'), {
+    points: [
+      { x: bounds.left, y },
+      { x: bounds.left + 14, y },
+      {
+        x: (bounds.left + bounds.right) / 2,
+        y: y - Math.sign(asVector(direction)[1]) * 10
+      },
+      { x: bounds.right - 14, y },
+      { x: bounds.right, y },
+    ],
+    closed: false,
+    stroke: opts?.color ?? opts?.stroke ?? '#e2e8f0',
+    strokeWidth: opts?.strokeWidth ?? 4,
+  });
 }
 
 function tokenizeMathTex(tex: string): string[] {

@@ -9,6 +9,14 @@
   different established style.
 - Keep `manim-api.ts` aligned with Manim Community Edition conventions and
   behavior whenever adding or changing primitives/animation APIs.
+- A TS sweep script should be the exact counterpart of its corresponding
+  `.py` sweep script. Do not work around `manim-api.ts` limitations inside
+  the TS script just to make a scene look right.
+- When a TS sweep scene diverges from the Python version, fix the TS anim
+  library first. The goal of the sweep is to improve library parity, not to
+  hide missing parity with scene-specific patches.
+- If full parity is not yet practical, note the next required library step
+  toward parity in your handoff or final response.
 
 ## Svelte 5 directives
 
