@@ -6,6 +6,7 @@ import { buildCairoParityScene } from './ts/cairoParity';
 import { buildCameraAnd3DScene } from './ts/cameraAnd3d';
 import { buildExportProfilesScene } from './ts/exportProfiles';
 import { buildGroupsLayersZIndexScene } from './ts/groupsLayersZindex';
+import { buildGeometryTextPrimitivesScene } from './ts/geometryTextPrimitives';
 import { buildImagesSvgAssetsScene } from './ts/imagesSvgAssets';
 import { buildLightingShading3DScene } from './ts/lightingShading3d';
 import { buildMobjectsBasicsScene } from './ts/mobjectsBasics';
@@ -46,6 +47,11 @@ const registry = new Map<string, TsSceneBuilder>([
     buildPositioningPrimitivesScene
   ],
   ['transform_matching_tex:euler_rearrange', buildTransformMatchingTexScene]
+  ,
+  [
+    'geometry_and_text_primitives:geometry_text_primitives',
+    buildGeometryTextPrimitivesScene
+  ]
 ]);
 
 export function sceneBuilderFor(

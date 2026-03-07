@@ -17,7 +17,8 @@ export const pyDurationSecByScene: Record<string, number> = {
   'scene_sections_and_voiceover_hooks:sections_demo': 1.2,
   'text_math_tex:text_math': 1.7,
   'transforms_core:core_transform': 3.0,
-  'updaters_and_always_redraw:updater_demo': 2.0
+  'updaters_and_always_redraw:updater_demo': 2.0,
+  'geometry_and_text_primitives:geometry_text_primitives': 2.6
 };
 
 export function pyDurationSecFor(scriptId: string, sceneId: string):

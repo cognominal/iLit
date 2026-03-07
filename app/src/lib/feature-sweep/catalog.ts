@@ -152,6 +152,18 @@ export const scripts: ScriptEntry[] = [
         description: 'TransformMatchingTex from e^{i\\pi}+1=0 to e^{i\\pi}=-1.'
       }
     ]
+  },
+  {
+    id: 'geometry_and_text_primitives',
+    title: '19 Geometry and Text Primitives',
+    file: 'py/19_geometry_and_text_primitives.py',
+    scenes: [
+      {
+        id: 'geometry_text_primitives',
+        title: 'Geometry + Text',
+        description: 'Exercise new geometry and text primitive support.'
+      }
+    ]
   }
 ];
 

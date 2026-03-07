@@ -232,6 +232,18 @@ export const tsScripts: TsScriptEntry[] = [
         description: 'Match and transform equation tokens between MathTex forms.'
       }
     ]
+  },
+  {
+    id: 'geometry_and_text_primitives',
+    title: '19 Geometry and Text Primitives',
+    source: 'app/src/lib/ts-feature-sweep/ts/geometryTextPrimitives.ts',
+    scenes: [
+      {
+        id: 'geometry_text_primitives',
+        title: 'Geometry + Text',
+        description: 'Exercise new geometry and text primitive support.'
+      }
+    ]
   }
 ];
 
