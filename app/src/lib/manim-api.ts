@@ -153,7 +153,10 @@ export type Animation = {
 };
 
 type PendingAnimation =
-  Omit<Animation, 'runTime' | 'phase'> & { runTime?: number };
+  Omit<Animation, 'runTime' | 'phase'> & {
+    runTime?: number;
+    _introducerRoot?: Mobject;
+  };
 
 export type ScenePhase = {
   phase: number;
@@ -245,8 +248,19 @@ export class Scene {
     | Array<Omit<Animation, 'runTime' | 'phase'> & { runTime?: number }>
   >): void {
     if (animations.length === 0) return;
-    const flat = animations.flat();
+    const flat = animations.flat() as PendingAnimation[];
+    const introduced = new Set<string>();
     for (const animation of flat) {
+      const root = animation._introducerRoot;
+      if (
+        root &&
+        (animation.kind === 'create' || animation.kind === 'fadeIn') &&
+        !introduced.has(root.id) &&
+        !flattenMobjects(this.mobjects).some((mobject) => mobject.id === root.id)
+      ) {
+        this.add(root);
+        introduced.add(root.id);
+      }
       this.timeline.push({
         ...animation,
         runTime: animation.runTime ?? this.defaultCreateSec,
@@ -2278,13 +2292,15 @@ export function Create(
     return {
       kind: 'create',
       targetId: targets[0].id,
-      runTime: opts?.runTime
+      runTime: opts?.runTime,
+      _introducerRoot: target
     };
   }
   return targets.map((item) => ({
     kind: 'create',
     targetId: item.id,
-    runTime: opts?.runTime
+    runTime: opts?.runTime,
+    _introducerRoot: target
   }));
 }
 
@@ -2328,6 +2344,7 @@ export function FadeIn(
       targetId: item.id,
       runTime: opts?.runTime,
       meta: Object.keys(meta).length > 0 ? meta : undefined,
+      _introducerRoot: target,
     };
   }
 

@@ -169,7 +169,6 @@ export function buildGeometryTextPrimitivesScene(): Scene {
   textBlock.toEdge!(RIGHT, 0.6).shift!([0, -0.5, 0]);
 
   scene.add(title);
-  scene.add(shapes, geometry, annotated, textBlock);
   scene.play(Create(shapes), Create(geometry));
   scene.play(FadeIn(annotated), FadeIn(textBlock));
   scene.wait(0.8);
