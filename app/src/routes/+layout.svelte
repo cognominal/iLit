@@ -19,12 +19,35 @@
     current === '/ts-sweep' || current.startsWith('/ts-scenes/')
   );
   const isTsSceneRoute = $derived(current.startsWith('/ts-scenes/'));
+  const tsSceneLayoutMode = $derived(
+    page.url.searchParams.get('layout') === 'code-only'
+      ? 'code-only'
+      : 'default'
+  );
+  const tsSceneNextLayoutMode = $derived(
+    tsSceneLayoutMode === 'default' ? 'code-only' : 'default'
+  );
 
   async function onTsChange(event: Event): Promise<void> {
     const target = event.currentTarget as HTMLSelectElement;
     const next = target.value;
     if (!next || next === current) return;
-    await goto(next);
+    const nextUrl = new URL(next, page.url);
+    if (isTsSceneRoute && tsSceneLayoutMode === 'code-only') {
+      nextUrl.searchParams.set('layout', 'code-only');
+    }
+    await goto(`${nextUrl.pathname}${nextUrl.search}`);
+  }
+
+  async function toggleTsSceneLayout(): Promise<void> {
+    if (!isTsSceneRoute) return;
+    const nextUrl = new URL(page.url);
+    nextUrl.searchParams.set('layout', tsSceneNextLayoutMode);
+    await goto(`${nextUrl.pathname}${nextUrl.search}`, {
+      keepFocus: true,
+      noScroll: true,
+      replaceState: true
+    });
   }
 
 </script>
@@ -58,6 +81,16 @@
             >
               ts sweep
             </a>
+            <button
+              class="rounded-md border border-slate-700 bg-slate-950 px-2 py-1
+              text-xs font-medium text-slate-300 hover:text-cyan-300"
+              onclick={toggleTsSceneLayout}
+              type="button"
+            >
+              {tsSceneNextLayoutMode === 'code-only'
+                ? 'code only'
+                : 'default'}
+            </button>
           </div>
           <div class="flex h-full items-center gap-3 bg-slate-950 px-4">
             <span
