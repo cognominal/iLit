@@ -162,19 +162,18 @@ surface and the current Svelte preview renderer.
   scenes, and the local axes frame/label styling has been tuned closer
   to the Python render.
 
-## Partial
-
 ### 10 `images_svg_and_assets`
 
 - Python: [`py/10_images_svg_and_assets.py`](/Users/cog/mine/dlx_sv/py/10_images_svg_and_assets.py)
 - TS: [`imagesSvgAssets.ts`](/Users/cog/mine/dlx_sv/app/src/lib/ts-feature-sweep/ts/imagesSvgAssets.ts)
-- Status: `Partial`
-- Missing:
-  `SVGMobject` is now represented in the TS adapter, but the repository
-  still does not contain the original `assets/sample.svg`. That means
-  the true success-path asset load cannot be matched yet. The TS scene
-  can only represent the structure, not the original file-backed
-  fallback behavior.
+- Status: `Parity`
+- Notes:
+  The repository now contains the real `assets/sample.svg` input used by
+  both the Python and TS scenes. The TS scene follows the matching
+  success path by loading the real file-backed asset instead of adding a
+  structural fallback placeholder.
+
+## Partial
 
 ## Not In Parity
 
@@ -224,11 +223,13 @@ in [`manim-api.ts`](/Users/cog/mine/dlx_sv/app/src/lib/manim-api.ts):
   `Axes(...)` now builds tick marks and numeric labels from axis ranges
   instead of only returning the two main axis lines, with explicit
   number-label opt-in and closer plot-frame typography/styling
+- SVG asset inputs:
+  the repo now includes the real `assets/sample.svg` success-path input
+  used by both the Python and TS scenes
 
 ## Remaining High-Value Gaps
 
 If the next goal is to move more of the partial/non-parity scenes into
 full parity, the highest-value missing pieces are:
 
-1. Real asset-backed SVG loading inputs.
-2. 3D scene, camera, and renderer integration.
+1. 3D scene, camera, and renderer integration.
