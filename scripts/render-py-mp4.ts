@@ -34,7 +34,9 @@ const SCENE_CLASS_BY_KEY: Record<string, string> = {
   'path_to_path_morphing:path_to_path': 'PathToPathMorphing',
   'transform_matching_tex:euler_rearrange': 'TransformMatchingTexDemo',
   'geometry_and_text_primitives:geometry_text_primitives':
-    'GeometryAndTextPrimitives'
+    'GeometryAndTextPrimitives',
+  'doubly_linked_list_deletion:dll_delete':
+    'DoublyLinkedListDeletion'
 };
 
 const QUALITY_FLAG_BY_PROFILE: Record<Profile, string> = {

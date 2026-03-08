@@ -21,6 +21,7 @@ import { buildTextMathTexScene } from './ts/textMathTex';
 import { buildTransformMatchingTexScene } from './ts/transformMatchingTex';
 import { buildTransformsCoreScene } from './ts/transformsCore';
 import { buildUpdatersAlwaysRedrawScene } from './ts/updatersAlwaysRedraw';
+import { buildDoublyLinkedListDeletionScene } from './ts/doublyLinkedListDeletion';
 
 export type TsSceneBuilder = () => Scene;
 
@@ -51,6 +52,10 @@ const registry = new Map<string, TsSceneBuilder>([
   [
     'geometry_and_text_primitives:geometry_text_primitives',
     buildGeometryTextPrimitivesScene
+  ],
+  [
+    'doubly_linked_list_deletion:dll_delete',
+    buildDoublyLinkedListDeletionScene
   ]
 ]);
 

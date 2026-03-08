@@ -244,6 +244,18 @@ export const tsScripts: TsScriptEntry[] = [
         description: 'Exercise new geometry and text primitive support.'
       }
     ]
+  },
+  {
+    id: 'doubly_linked_list_deletion',
+    title: '20 Doubly Linked List Deletion',
+    source: 'app/src/lib/ts-feature-sweep/ts/doublyLinkedListDeletion.ts',
+    scenes: [
+      {
+        id: 'dll_delete',
+        title: 'DLL Delete',
+        description: 'Delete the third node, then the second, in a circular list.'
+      }
+    ]
   }
 ];
 

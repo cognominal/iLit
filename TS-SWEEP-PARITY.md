@@ -128,6 +128,25 @@ surface and the current Svelte preview renderer.
   Now adds only the start expression before playing
   `TransformMatchingTex`, matching the original scene structure.
 
+### 19 `geometry_and_text_primitives`
+
+- Python: [`py/19_geometry_and_text_primitives.py`](/Users/cog/mine/dlx_sv/py/19_geometry_and_text_primitives.py)
+- TS: [`geometryTextPrimitives.ts`](/Users/cog/mine/dlx_sv/app/src/lib/ts-feature-sweep/ts/geometryTextPrimitives.ts)
+- Status: `Parity`
+- Notes:
+  Uses the same geometry, annotation, and text primitive structure as
+  the Python scene.
+
+### 20 `doubly_linked_list_deletion`
+
+- Python: [`py/20_doubly_linked_list_deletion.py`](/Users/cog/mine/dlx_sv/py/20_doubly_linked_list_deletion.py)
+- TS: [`doublyLinkedListDeletion.ts`](/Users/cog/mine/dlx_sv/app/src/lib/ts-feature-sweep/ts/doublyLinkedListDeletion.ts)
+- Status: `Parity`
+- Notes:
+  The TS scene mirrors the Python scene model: same node layout, same
+  bypass-link replacements, same two fade-out deletions, and the same
+  collapse order after each unlink.
+
 ### 04 `updaters_and_always_redraw`
 
 - Python: [`py/04_updaters_and_always_redraw.py`](/Users/cog/mine/dlx_sv/py/04_updaters_and_always_redraw.py)
