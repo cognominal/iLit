@@ -176,6 +176,13 @@
   $effect(() => {
     if (timeline.mode !== 'normal' || !timeline.isPlaying) return;
 
+    if (captureMode) {
+      const interval = window.setInterval(() => {
+        dispatch({ type: 'tick', nowMs: performance.now() });
+      }, FRAME_STEP_SEC * 1000);
+      return () => clearInterval(interval);
+    }
+
     let raf = 0;
     const tick = (now: number) => {
       dispatch({ type: 'tick', nowMs: now });

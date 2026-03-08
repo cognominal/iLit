@@ -15,6 +15,8 @@
       sourceId: string;
       targetId: string;
       progress: number;
+      source?: Mobject;
+      target?: Mobject;
     }>;
     completedReplacementSources?: Set<string>;
     completedReplacementTargets?: Set<string>;
@@ -228,6 +230,20 @@
     return out;
   }
 
+  function lerpNumber(a: number, b: number, t: number): number {
+    return a + (b - a) * t;
+  }
+
+  function replacementColor(
+    from: string | undefined,
+    to: string | undefined,
+    progress: number
+  ): string {
+    return progress < 0.5
+      ? (from ?? to ?? '#e2e8f0')
+      : (to ?? from ?? '#e2e8f0');
+  }
+
   const orderedMobjects = $derived(
     [...mobjects].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
   );
@@ -241,18 +257,29 @@
 >
   <rect x="0" y="0" width={STAGE_WIDTH} height={STAGE_HEIGHT} fill="#020617" />
   {#each replacements as replacement (replacement.sourceId + ':' + replacement.targetId)}
-    {@const from = mobjects.find((m) => m.id === replacement.sourceId)}
-    {@const to = mobjects.find((m) => m.id === replacement.targetId)}
+    {@const from =
+      replacement.source ?? mobjects.find((m) => m.id === replacement.sourceId)}
+    {@const to =
+      replacement.target ?? mobjects.find((m) => m.id === replacement.targetId)}
     {#if from && to}
       {@const fromPts = pointsFor(from, 72)}
       {@const toPts = pointsFor(to, 72)}
-      {@const d = pathFrom(lerpPoints(fromPts, toPts, replacement.progress))}
+      {@const closed = (from.closed ?? true) || (to.closed ?? true)}
+      {@const d = polylinePathFrom(
+        lerpPoints(fromPts, toPts, replacement.progress),
+        closed
+      )}
       {#if d}
         <path
           d={d}
-          fill="none"
-          stroke={replacement.progress < 0.5 ? (from.stroke ?? '#e2e8f0') : (to.stroke ?? '#e2e8f0')}
-          stroke-width={(from.strokeWidth ?? to.strokeWidth ?? 8)}
+          fill={closed ? replacementColor(from.fill, to.fill, replacement.progress) : 'none'}
+          fill-opacity={closed ? 1 : undefined}
+          stroke={replacementColor(from.stroke, to.stroke, replacement.progress)}
+          stroke-width={lerpNumber(
+            from.strokeWidth ?? 8,
+            to.strokeWidth ?? from.strokeWidth ?? 8,
+            replacement.progress
+          )}
         />
       {/if}
     {/if}

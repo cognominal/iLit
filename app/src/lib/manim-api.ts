@@ -9,11 +9,13 @@ type Updater = (mobject: Mobject) => Mobject | void;
 export type RateFunction = (t: number) => number;
 type AnimationOpts = {
   runTime?: number;
+  run_time?: number;
   rateFunc?: string | RateFunction;
   rate_func?: string | RateFunction;
 };
 
 export type Mobject = {
+  [index: number]: Mobject | undefined;
   id: string;
   kind: MobjectKind;
   stroke: string;
@@ -173,18 +175,19 @@ export class Scene {
   private defaultCreateSec: number;
   private phase = 0;
   private baseMobjects = new Map<string, Mobject>();
+  private baseSceneRoots: Mobject[] = [];
+  private baseForegroundRoots: Mobject[] = [];
   mobjects: Mobject[] = [];
   foregroundMobjects: Mobject[] = [];
   sections: string[] = [];
   timeline: Animation[] = [];
 
-  constructor(defaultCreateSec = 0.8) {
+  constructor(defaultCreateSec = 1.0) {
     this.defaultCreateSec = defaultCreateSec;
   }
 
   add(...mobjects: Mobject[]): void {
-    this.rememberBaseMobjects(mobjects);
-    this.mobjects.push(...mobjects);
+    this.appendMobjects('scene', mobjects, true);
   }
 
   remove(...mobjects: Mobject[]): void {
@@ -232,8 +235,7 @@ export class Scene {
   }
 
   addForegroundMobject(...mobjects: Mobject[]): void {
-    this.rememberBaseMobjects(mobjects);
-    this.foregroundMobjects.push(...mobjects);
+    this.appendMobjects('foreground', mobjects, true);
   }
 
   add_foreground_mobject(...mobjects: Mobject[]): void {
@@ -254,25 +256,37 @@ export class Scene {
   play(...animations: Array<
     | (Omit<Animation, 'runTime' | 'phase'> & { runTime?: number })
     | Array<Omit<Animation, 'runTime' | 'phase'> & { runTime?: number }>
+    | AnimationOpts
   >): void {
     if (animations.length === 0) return;
-    const flat = animations.flat() as PendingAnimation[];
+    const last = animations[animations.length - 1];
+    const trailingOpts = isAnimationOpts(last) ? last : undefined;
+    const items = trailingOpts ? animations.slice(0, -1) : animations;
+    const flat = items.flat() as PendingAnimation[];
     const introduced = new Set<string>();
     for (const animation of flat) {
       const root = animation._introducerRoot;
       if (
         root &&
-        (animation.kind === 'create' || animation.kind === 'fadeIn') &&
+        (
+          animation.kind === 'create' ||
+          animation.kind === 'fadeIn' ||
+          animation.kind === 'replacementTransform'
+        ) &&
         !introduced.has(root.id) &&
         !this.mobjects.some((mobject) => mobject.id === root.id) &&
         !flattenMobjects(this.mobjects).some((mobject) => mobject.id === root.id)
       ) {
-        this.add(root);
+        this.appendMobjects('scene', [root], false);
         introduced.add(root.id);
       }
       this.timeline.push({
         ...animation,
-        runTime: animation.runTime ?? this.defaultCreateSec,
+        runTime:
+          animation.runTime ??
+          trailingOpts?.run_time ??
+          trailingOpts?.runTime ??
+          this.defaultCreateSec,
         phase: this.phase
       });
     }
@@ -318,6 +332,36 @@ export class Scene {
       if (!this.baseMobjects.has(mobject.id)) {
         this.baseMobjects.set(mobject.id, cloneMobject(mobject, mobject.id));
       }
+    }
+  }
+
+  getBaseSceneRoots(): Mobject[] {
+    return this.baseSceneRoots.map((mobject) => cloneMobject(mobject, mobject.id));
+  }
+
+  getBaseForegroundRoots(): Mobject[] {
+    return this.baseForegroundRoots.map((mobject) =>
+      cloneMobject(mobject, mobject.id)
+    );
+  }
+
+  private appendMobjects(
+    layer: 'scene' | 'foreground',
+    mobjects: Mobject[],
+    rememberRoots: boolean
+  ): void {
+    this.rememberBaseMobjects(mobjects);
+    const target = layer === 'scene' ? this.mobjects : this.foregroundMobjects;
+    target.push(...mobjects);
+    if (!rememberRoots) return;
+    const rootSnapshots = layer === 'scene'
+      ? this.baseSceneRoots
+      : this.baseForegroundRoots;
+    const knownIds = new Set(rootSnapshots.map((mobject) => mobject.id));
+    for (const mobject of mobjects) {
+      if (knownIds.has(mobject.id)) continue;
+      rootSnapshots.push(cloneMobject(mobject, mobject.id));
+      knownIds.add(mobject.id);
     }
   }
 }
@@ -366,11 +410,11 @@ export class ValueTracker {
   private setValueAnimation(value: number, opts?: AnimationOpts): PendingAnimation {
     const start = this.value;
     this.value = value;
-    return {
+      return {
       kind: 'value',
       tracker: this,
       rateFunc: normalizeRateFunction(opts),
-      runTime: opts?.runTime,
+      runTime: normalizeRunTime(opts),
       meta: {
         valueStart: start,
         valueEnd: value,
@@ -561,6 +605,11 @@ function anchorFromDirection(
   };
 }
 
+function normalizeSceneLength(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  return Math.abs(value) <= 20 ? value * UNIT_PX : value;
+}
+
 function translateMobject(mobject: Mobject, dxPx: number, dyPx: number): void {
   if (mobject.kind === 'group') {
     const children = mobject.children ?? [];
@@ -578,18 +627,37 @@ function translateMobject(mobject: Mobject, dxPx: number, dyPx: number): void {
   mobject.y = getMobjectY(mobject) + dyPx;
 }
 
-function cloneMobject(mobject: Mobject, forcedId?: string): Mobject {
+function cloneMobject(
+  mobject: Mobject,
+  forcedId?: string,
+  regenerateIds = false
+): Mobject {
   const clone: Mobject = {
     ...mobject,
-    id: forcedId ?? autoId(mobject.kind),
+    id: forcedId ?? (regenerateIds ? autoId(mobject.kind) : mobject.id),
     points: mobject.points?.map((point) => ({ ...point })),
-    children: mobject.children?.map((child) => cloneMobject(child)),
+    children: mobject.children?.map((child) =>
+      cloneMobject(child, undefined, regenerateIds)
+    ),
     updaters: mobject.updaters ? [...mobject.updaters] : [],
     savedState: mobject.savedState ? { ...mobject.savedState } : undefined,
     target: undefined,
     animate: undefined,
   };
   return attachMobjectApi(clone);
+}
+
+function syncGroupIndexProps(mobject: Mobject): void {
+  if (mobject.kind !== 'group') return;
+  const children = mobject.children ?? [];
+  let index = 0;
+  while (index in mobject) {
+    delete mobject[index];
+    index += 1;
+  }
+  children.forEach((child, childIndex) => {
+    mobject[childIndex] = child;
+  });
 }
 
 function restoreMobject(target: Mobject, source: Mobject): void {
@@ -601,6 +669,91 @@ function restoreMobject(target: Mobject, source: Mobject): void {
   }
   Object.assign(target, restored);
   attachMobjectApi(target);
+}
+
+function replaceChildById(
+  mobject: Mobject,
+  sourceId: string,
+  replacement: Mobject
+): boolean {
+  if (mobject.kind !== 'group') return false;
+  const children = mobject.children ?? [];
+  for (let i = 0; i < children.length; i += 1) {
+    const child = children[i]!;
+    if (child.id === sourceId) {
+      children[i] = cloneMobject(replacement, replacement.id);
+      syncGroupIndexProps(mobject);
+      return true;
+    }
+    if (replaceChildById(child, sourceId, replacement)) {
+      syncGroupIndexProps(mobject);
+      return true;
+    }
+  }
+  return false;
+}
+
+function removeChildById(mobject: Mobject, sourceId: string): boolean {
+  if (mobject.kind !== 'group') return false;
+  const children = mobject.children ?? [];
+  const index = children.findIndex((child) => child.id === sourceId);
+  if (index >= 0) {
+    children.splice(index, 1);
+    syncGroupIndexProps(mobject);
+    return true;
+  }
+  for (const child of children) {
+    if (removeChildById(child, sourceId)) {
+      syncGroupIndexProps(mobject);
+      return true;
+    }
+  }
+  return false;
+}
+
+function applyCompletedReplacementToScene(
+  scene: Scene,
+  sourceId: string,
+  targetId: string
+): void {
+  const replacement =
+    flattenSceneMobjects([...scene.mobjects, ...scene.foregroundMobjects])
+      .find((mobject) => mobject.id === targetId) ??
+    scene.getBaseMobject(targetId);
+  if (!replacement) return;
+  for (let i = 0; i < scene.mobjects.length; i += 1) {
+    const mobject = scene.mobjects[i]!;
+    if (mobject.id === sourceId) {
+      scene.mobjects[i] = cloneMobject(replacement, replacement.id);
+      return;
+    }
+    if (replaceChildById(mobject, sourceId, replacement)) {
+      return;
+    }
+  }
+  for (let i = 0; i < scene.foregroundMobjects.length; i += 1) {
+    const mobject = scene.foregroundMobjects[i]!;
+    if (mobject.id === sourceId) {
+      scene.foregroundMobjects[i] = cloneMobject(replacement, replacement.id);
+      return;
+    }
+    if (replaceChildById(mobject, sourceId, replacement)) {
+      return;
+    }
+  }
+}
+
+function applyCompletedFadeOutToScene(scene: Scene, sourceId: string): void {
+  scene.mobjects = scene.mobjects.filter((mobject) => mobject.id !== sourceId);
+  scene.foregroundMobjects = scene.foregroundMobjects.filter(
+    (mobject) => mobject.id !== sourceId
+  );
+  for (const mobject of scene.mobjects) {
+    removeChildById(mobject, sourceId);
+  }
+  for (const mobject of scene.foregroundMobjects) {
+    removeChildById(mobject, sourceId);
+  }
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -638,6 +791,17 @@ function normalizeRateFunction(
   opts?: AnimationOpts
 ): string | RateFunction | undefined {
   return opts?.rate_func ?? opts?.rateFunc;
+}
+
+function normalizeRunTime(opts?: AnimationOpts): number | undefined {
+  return opts?.run_time ?? opts?.runTime;
+}
+
+function isAnimationOpts(value: unknown): value is AnimationOpts {
+  return typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !('kind' in value);
 }
 
 function parsePointsMeta(value: unknown): Point[] | null {
@@ -702,20 +866,23 @@ function transformAnimation(
     kind: 'transform',
     targetId: mobject.id,
     rateFunc: normalizeRateFunction(opts),
-    runTime: opts?.runTime,
+    runTime: normalizeRunTime(opts),
     meta: finalizeMeta(meta, mobject),
   };
 }
 
 function attachMobjectApi(mobject: Mobject): Mobject {
+  syncGroupIndexProps(mobject);
   mobject.become = (target: Mobject): Mobject => {
     const currentId = mobject.id;
     Object.assign(mobject, { ...target, id: currentId });
     return mobject;
   };
   mobject.animate = {
-    become: (target: Mobject, opts?: { runTime?: number }) =>
-      ReplacementTransform(mobject, target, opts),
+    become: (target: Mobject, opts?: { runTime?: number }) => {
+      const animation = ReplacementTransform(mobject, target, opts);
+      return Array.isArray(animation) ? animation[0]! : animation;
+    },
     moveAlongPath: (path: Mobject, opts?: { runTime?: number }) =>
       MoveAlongPath(mobject, path, opts),
     shift: (delta: PointLike, opts?: AnimationOpts) =>
@@ -846,7 +1013,7 @@ function attachMobjectApi(mobject: Mobject): Mobject {
     }
     return mobject;
   };
-  mobject.copy = (id?: string): Mobject => cloneMobject(mobject, id);
+  mobject.copy = (id?: string): Mobject => cloneMobject(mobject, id, true);
   mobject.setColor = (color: Color): Mobject => {
     mobject.stroke = color;
     mobject.fill = color;
@@ -1059,7 +1226,7 @@ function attachMobjectApi(mobject: Mobject): Mobject {
     return mobject;
   };
   mobject.generateTarget = (): Mobject => {
-    mobject.target = cloneMobject(mobject, `${mobject.id}_target`);
+    mobject.target = cloneMobject(mobject, `${mobject.id}_target`, true);
     return mobject.target;
   };
   mobject.generate_target = mobject.generateTarget;
@@ -1092,11 +1259,13 @@ function attachMobjectApi(mobject: Mobject): Mobject {
   };
   mobject.add = (...children: Mobject[]): Mobject => {
     mobject.children = [...(mobject.children ?? []), ...children];
+    syncGroupIndexProps(mobject);
     return mobject;
   };
   mobject.remove = (...children: Mobject[]): Mobject => {
     const ids = new Set(children.map((child) => child.id));
     mobject.children = (mobject.children ?? []).filter((child) => !ids.has(child.id));
+    syncGroupIndexProps(mobject);
     return mobject;
   };
   mobject.addUpdater = (updater: Updater): Mobject => {
@@ -1179,6 +1348,8 @@ export type EvaluatedSceneState = {
     sourceId: string;
     targetId: string;
     progress: number;
+    source?: Mobject;
+    target?: Mobject;
   }>;
   completedReplacementSources: Set<string>;
   completedReplacementTargets: Set<string>;
@@ -1316,6 +1487,26 @@ function pointAlongPath(points: Point[], t: number): Point {
   return points[points.length - 1];
 }
 
+function staggeredCreateProgress(step: Animation, stepProgress: number): number {
+  const childIndex = typeof step.meta?.createChildIndex === 'number'
+    ? step.meta.createChildIndex
+    : null;
+  const childCount = typeof step.meta?.createChildCount === 'number'
+    ? step.meta.createChildCount
+    : null;
+  if (childIndex === null || childCount === null || childCount <= 1) {
+    return stepProgress;
+  }
+  const scaled = (stepProgress * childCount) - childIndex;
+  return Math.max(0, Math.min(1, scaled));
+}
+
+function refreshPathLookup(scene: Scene): Map<string, Mobject> {
+  return new Map(
+    flattenSceneMobjects(scene.mobjects).map((mobject) => [mobject.id, mobject])
+  );
+}
+
 function runUpdaters(mobject: Mobject): void {
   for (const child of mobject.children ?? []) {
     runUpdaters(child);
@@ -1344,13 +1535,11 @@ export function evaluateSceneAtTime(
   const replacements: EvaluatedSceneState['replacements'] = [];
   const completedReplacementSources = new Set<string>();
   const completedReplacementTargets = new Set<string>();
+  scene.mobjects = scene.getBaseSceneRoots();
+  scene.foregroundMobjects = scene.getBaseForegroundRoots();
+
   const topLevel = [...scene.mobjects, ...scene.foregroundMobjects];
   const topLevelIds = new Set(topLevel.map((mobject) => mobject.id));
-
-  for (const mobject of topLevel) {
-    const snapshot = scene.getBaseMobject(mobject.id);
-    if (snapshot) restoreMobject(mobject, snapshot);
-  }
 
   for (const mobject of flattenSceneMobjects(scene.mobjects)) {
     progressById.set(mobject.id, 1);
@@ -1359,12 +1548,24 @@ export function evaluateSceneAtTime(
     if (step.targetId && introKinds.has(step.kind)) {
       progressById.set(step.targetId, 0);
     }
+    if (step.kind === 'replacementTransform' && step.targetId) {
+      progressById.set(step.targetId, 0);
+    }
   }
 
   const phases = scenePhases(scene);
-  const pathLookup = new Map(
-    flattenSceneMobjects(scene.mobjects).map((mobject) => [mobject.id, mobject])
-  );
+  let pathLookup = refreshPathLookup(scene);
+  const replacementAliases = new Map<string, string>();
+
+  function resolveReplacementSourceId(id: string): string {
+    let current = id;
+    const seen = new Set<string>();
+    while (replacementAliases.has(current) && !seen.has(current)) {
+      seen.add(current);
+      current = replacementAliases.get(current)!;
+    }
+    return current;
+  }
 
   let phaseStart = 0;
   for (const phase of phases) {
@@ -1395,17 +1596,30 @@ export function evaluateSceneAtTime(
 
       if (step.kind === 'replacementTransform') {
         if (step.sourceId && step.targetId) {
+          const sourceId = pathLookup.has(step.sourceId)
+            ? step.sourceId
+            : resolveReplacementSourceId(step.sourceId);
+          const source = pathLookup.get(sourceId) ??
+            scene.getBaseMobject(sourceId);
+          const target = pathLookup.get(step.targetId) ??
+            scene.getBaseMobject(step.targetId);
           if (stepProgress > 0 && stepProgress < 1) {
             replacements.push({
-              sourceId: step.sourceId,
+              sourceId,
               targetId: step.targetId,
-              progress: stepProgress
+              progress: stepProgress,
+              source: source ? cloneMobject(source, source.id) : undefined,
+              target: target ? cloneMobject(target, target.id) : undefined,
             });
           }
           if (stepProgress >= 1) {
-            completedReplacementSources.add(step.sourceId);
+            completedReplacementSources.add(sourceId);
             completedReplacementTargets.add(step.targetId);
             progressById.set(step.targetId, 1);
+            replacementAliases.set(step.sourceId, step.targetId);
+            replacementAliases.set(sourceId, step.targetId);
+            applyCompletedReplacementToScene(scene, sourceId, step.targetId);
+            pathLookup = refreshPathLookup(scene);
           }
         }
         continue;
@@ -1414,9 +1628,17 @@ export function evaluateSceneAtTime(
       if (step.targetId) {
         const target = pathLookup.get(step.targetId);
         if (step.kind === 'create' || step.kind === 'fadeIn') {
-          progressById.set(step.targetId, stepProgress);
+          const progress = step.kind === 'create'
+            ? staggeredCreateProgress(step, stepProgress)
+            : stepProgress;
+          progressById.set(step.targetId, progress);
         } else if (step.kind === 'fadeOut') {
-          progressById.set(step.targetId, Math.max(0, 1 - stepProgress));
+          const progress = Math.max(0, 1 - stepProgress);
+          progressById.set(step.targetId, progress);
+          if (progress <= 0) {
+            applyCompletedFadeOutToScene(scene, step.targetId);
+            pathLookup = refreshPathLookup(scene);
+          }
         }
         if (target && step.kind !== 'create' && step.kind !== 'fadeIn') {
           applyAnimationToMobject(step, target, stepProgress, pathLookup);
@@ -1498,7 +1720,12 @@ export function Rectangle(
     height?: number;
     stroke?: string;
     strokeWidth?: number;
+    stroke_width?: number;
     color?: Color;
+    fill?: string;
+    fill_color?: string;
+    fillOpacity?: number;
+    fill_opacity?: number;
   },
   maybeOpts?: {
     id?: string;
@@ -1508,7 +1735,12 @@ export function Rectangle(
     height?: number;
     stroke?: string;
     strokeWidth?: number;
+    stroke_width?: number;
     color?: Color;
+    fill?: string;
+    fill_color?: string;
+    fillOpacity?: number;
+    fill_opacity?: number;
   }
 ): Mobject {
   const id = typeof idOrOpts === 'string' ? idOrOpts : autoId('rectangle');
@@ -1519,11 +1751,12 @@ export function Rectangle(
     kind: 'square',
     x: opts.x ?? CENTER_X,
     y: opts.y ?? CENTER_Y,
-    width: opts.width ?? 140,
-    height: opts.height ?? 84,
+    width: normalizeSceneLength(opts.width) ?? 140,
+    height: normalizeSceneLength(opts.height) ?? 84,
     stroke: color,
-    strokeWidth: opts.strokeWidth ?? 8,
-    fill: 'none',
+    strokeWidth: opts.stroke_width ?? opts.strokeWidth ?? 8,
+    fill: opts.fill_color ?? opts.fill ?? 'none',
+    opacity: opts.fill_opacity ?? opts.fillOpacity ?? 1,
   });
 }
 
@@ -1583,7 +1816,7 @@ export function Circle(
     kind: 'circle',
     x: opts.x ?? CENTER_X,
     y: opts.y ?? CENTER_Y,
-    radius: opts.radius ?? 48,
+    radius: normalizeSceneLength(opts.radius) ?? 48,
     stroke: color,
     strokeWidth: opts.strokeWidth ?? 8,
     fill: 'none',
@@ -1620,9 +1853,13 @@ export function Ellipse(
     kind: 'circle',
     x: opts.x ?? CENTER_X,
     y: opts.y ?? CENTER_Y,
-    width: opts.width ?? 160,
-    height: opts.height ?? 96,
-    radius: Math.max(opts.width ?? 160, opts.height ?? 96) / 2,
+    width: normalizeSceneLength(opts.width) ?? 160,
+    height: normalizeSceneLength(opts.height) ?? 96,
+    radius:
+      Math.max(
+        normalizeSceneLength(opts.width) ?? 160,
+        normalizeSceneLength(opts.height) ?? 96
+      ) / 2,
     stroke: color,
     strokeWidth: opts.strokeWidth ?? 8,
     fill: 'none',
@@ -1636,7 +1873,9 @@ export function Dot(
     radius?: number;
     stroke?: string;
     fill?: string;
+    fill_color?: string;
     strokeWidth?: number;
+    stroke_width?: number;
     color?: Color;
   },
   pointOrOpts?: PointLike | {
@@ -1645,7 +1884,9 @@ export function Dot(
     radius?: number;
     stroke?: string;
     fill?: string;
+    fill_color?: string;
     strokeWidth?: number;
+    stroke_width?: number;
     color?: Color;
   },
   opts?: {
@@ -1654,7 +1895,9 @@ export function Dot(
     radius?: number;
     stroke?: string;
     fill?: string;
+    fill_color?: string;
     strokeWidth?: number;
+    stroke_width?: number;
     color?: Color;
   }
 ): Mobject {
@@ -1677,7 +1920,8 @@ export function Dot(
       ? inlineSource
       : undefined);
   const merged = { ...inlineOpts, ...opts };
-  const color = merged?.color ?? merged?.fill ?? merged?.stroke ?? '#e2e8f0';
+  const fill = merged?.fill_color ?? merged?.fill;
+  const color = merged?.color ?? fill ?? merged?.stroke ?? '#e2e8f0';
   const x = point?.x ?? merged?.x ?? CENTER_X;
   const y = point?.y ?? merged?.y ?? CENTER_Y;
   return attachMobjectApi({
@@ -1687,10 +1931,10 @@ export function Dot(
     y,
     // Manim CE Dot default radius is 0.08 scene units.
     // Our scene scale is 80 px/unit, so default is 6.4 px.
-    radius: merged?.radius ?? 6.4,
+    radius: normalizeSceneLength(merged?.radius) ?? 6.4,
     stroke: merged?.stroke ?? color,
-    fill: merged?.fill ?? color,
-    strokeWidth: merged?.strokeWidth ?? 0,
+    fill: fill ?? color,
+    strokeWidth: merged?.stroke_width ?? merged?.strokeWidth ?? 0,
   });
 }
 
@@ -1729,9 +1973,12 @@ export function Text(
     stroke?: string;
     fill?: string;
     fontSize?: number;
+    font_size?: number;
     fontFamily?: string;
+    font_family?: string;
     width?: number;
     textAlign?: 'left' | 'center' | 'right';
+    text_align?: 'left' | 'center' | 'right';
   }
 ): Mobject {
   const text = TitleText(opts?.id ?? autoId('text'), {
@@ -1740,11 +1987,11 @@ export function Text(
     value,
     stroke: opts?.stroke,
     fill: opts?.fill,
-    fontSize: opts?.fontSize ?? 36,
-    fontFamily: opts?.fontFamily,
+    fontSize: opts?.font_size ?? opts?.fontSize ?? 36,
+    fontFamily: opts?.font_family ?? opts?.fontFamily,
   });
   text.width = opts?.width;
-  text.textAlign = opts?.textAlign ?? 'center';
+  text.textAlign = opts?.text_align ?? opts?.textAlign ?? 'center';
   return text;
 }
 
@@ -2089,8 +2336,11 @@ export function Polygon(
       stroke?: string;
       color?: Color;
       strokeWidth?: number;
+      stroke_width?: number;
       fill?: string;
+      fill_color?: string;
       fillOpacity?: number;
+      fill_opacity?: number;
     }
   >
 ): Mobject {
@@ -2107,8 +2357,11 @@ export function Polygon(
     stroke?: string;
     color?: Color;
     strokeWidth?: number;
+    stroke_width?: number;
     fill?: string;
+    fill_color?: string;
     fillOpacity?: number;
+    fill_opacity?: number;
   };
   const vertices = (hasOpts ? tail.slice(0, -1) : tail) as PointLike[];
   const points = vertices.map((vertex) => fromPointLike(vertex));
@@ -2118,9 +2371,9 @@ export function Polygon(
     points,
     closed: true,
     stroke: opts.color ?? opts.stroke ?? '#e2e8f0',
-    strokeWidth: opts.strokeWidth ?? 6,
-    fill: opts.fill ?? 'none',
-    opacity: opts.fillOpacity ?? 1,
+    strokeWidth: opts.stroke_width ?? opts.strokeWidth ?? 6,
+    fill: opts.fill_color ?? opts.fill ?? 'none',
+    opacity: opts.fill_opacity ?? opts.fillOpacity ?? 1,
   });
 }
 
@@ -2335,8 +2588,20 @@ export function CubicBezier(
   b: PointLike,
   c: PointLike,
   d: PointLike,
-  e?: PointLike | { stroke?: string; strokeWidth?: number; samples?: number },
-  f?: { stroke?: string; strokeWidth?: number; samples?: number }
+  e?: PointLike | {
+    stroke?: string;
+    strokeWidth?: number;
+    stroke_width?: number;
+    samples?: number;
+    color?: Color;
+  },
+  f?: {
+    stroke?: string;
+    strokeWidth?: number;
+    stroke_width?: number;
+    samples?: number;
+    color?: Color;
+  }
 ): Mobject {
   const id = typeof a === 'string' ? a : autoId('cubic_bezier');
   const p0 = fromPointLike((typeof a === 'string' ? b : a) as PointLike);
@@ -2344,7 +2609,13 @@ export function CubicBezier(
   const p2 = fromPointLike((typeof a === 'string' ? d : c) as PointLike);
   const p3 = fromPointLike((typeof a === 'string' ? (e as PointLike) : d) as PointLike);
   const opts = (typeof a === 'string' ? f : e) as
-    | { stroke?: string; strokeWidth?: number; samples?: number }
+    | {
+      stroke?: string;
+      strokeWidth?: number;
+      stroke_width?: number;
+      samples?: number;
+      color?: Color;
+    }
     | undefined;
   const samples = Math.max(8, opts?.samples ?? 64);
   const points: Point[] = [];
@@ -2354,8 +2625,8 @@ export function CubicBezier(
   return Path(id, {
     points,
     closed: false,
-    stroke: opts?.stroke ?? '#e2e8f0',
-    strokeWidth: opts?.strokeWidth ?? 6,
+    stroke: opts?.color ?? opts?.stroke ?? '#e2e8f0',
+    strokeWidth: opts?.stroke_width ?? opts?.strokeWidth ?? 6,
   });
 }
 
@@ -2786,16 +3057,20 @@ export function Create(
       kind: 'create',
       targetId: targets[0].id,
       rateFunc: normalizeRateFunction(opts),
-      runTime: opts?.runTime,
+      runTime: normalizeRunTime(opts),
       _introducerRoot: target
     };
   }
-  return targets.map((item) => ({
+  return targets.map((item, index) => ({
     kind: 'create',
     targetId: item.id,
     rateFunc: normalizeRateFunction(opts),
-    runTime: opts?.runTime,
-    _introducerRoot: target
+    runTime: normalizeRunTime(opts),
+    _introducerRoot: target,
+    meta: {
+      createChildIndex: index,
+      createChildCount: targets.length,
+    }
   }));
 }
 
@@ -2803,6 +3078,7 @@ export function FadeIn(
   target: Mobject,
   opts?: {
     runTime?: number;
+    run_time?: number;
     rateFunc?: string | RateFunction;
     rate_func?: string | RateFunction;
     shift?: PointLike;
@@ -2840,7 +3116,7 @@ export function FadeIn(
       kind: 'fadeIn',
       targetId: item.id,
       rateFunc: normalizeRateFunction(opts),
-      runTime: opts?.runTime,
+      runTime: normalizeRunTime(opts),
       meta: Object.keys(meta).length > 0 ? meta : undefined,
       _introducerRoot: target,
     };
@@ -2864,14 +3140,14 @@ export function FadeOut(
       kind: 'fadeOut',
       targetId: targets[0].id,
       rateFunc: normalizeRateFunction(opts),
-      runTime: opts?.runTime,
+      runTime: normalizeRunTime(opts),
     };
   }
   return targets.map((item) => ({
     kind: 'fadeOut',
     targetId: item.id,
     rateFunc: normalizeRateFunction(opts),
-    runTime: opts?.runTime,
+    runTime: normalizeRunTime(opts),
   }));
 }
 
@@ -2888,13 +3164,64 @@ export function ReplacementTransform(
   source: Mobject,
   target: Mobject,
   opts?: AnimationOpts
-): Omit<Animation, 'runTime' | 'phase'> & { runTime?: number } {
+):
+  | PendingAnimation
+  | PendingAnimation[] {
+  if (source.kind === 'group' && target.kind === 'group') {
+    const sourceChildren = source.children ?? [];
+    const targetChildren = target.children ?? [];
+    const targetById = new Map(targetChildren.map((child) => [child.id, child]));
+    const matchedTargetIds = new Set<string>();
+    const animations: PendingAnimation[] = [];
+
+    for (let index = 0; index < sourceChildren.length; index += 1) {
+      const sourceChild = sourceChildren[index]!;
+      const matchedById = targetById.get(sourceChild.id);
+      const targetChild = matchedById ?? targetChildren[index];
+      if (!targetChild) {
+        const fade = FadeOut(sourceChild, { run_time: normalizeRunTime(opts) });
+        animations.push(...(Array.isArray(fade) ? fade : [fade]));
+        continue;
+      }
+      matchedTargetIds.add(targetChild.id);
+      if (sourceChild.id === targetChild.id) {
+        continue;
+      }
+      const childAnimation = ReplacementTransform(sourceChild, targetChild, opts);
+      animations.push(...(Array.isArray(childAnimation) ? childAnimation : [childAnimation]));
+    }
+
+    for (const targetChild of targetChildren) {
+      if (matchedTargetIds.has(targetChild.id)) continue;
+      const intro = FadeIn(targetChild, { run_time: normalizeRunTime(opts) });
+      animations.push(...(Array.isArray(intro) ? intro : [intro]));
+    }
+
+    return animations;
+  }
+
+  const sources = flattenRenderable(source);
+  const targets = flattenRenderable(target);
+  if (
+    sources.length > 1 &&
+    sources.length === targets.length
+  ) {
+    return sources.map((item, index) => ({
+      kind: 'replacementTransform',
+      sourceId: item.id,
+      targetId: targets[index]!.id,
+      rateFunc: normalizeRateFunction(opts),
+      runTime: normalizeRunTime(opts),
+      _introducerRoot: target,
+    }));
+  }
   return {
     kind: 'replacementTransform',
     sourceId: source.id,
     targetId: target.id,
     rateFunc: normalizeRateFunction(opts),
-    runTime: opts?.runTime
+    runTime: normalizeRunTime(opts),
+    _introducerRoot: target,
   };
 }
 
@@ -2931,9 +3258,10 @@ export function TransformMatchingTex(
     const src = sourceByToken.get(token) ?? [];
     const dst = targetByToken.get(token) ?? [];
     const matched = Math.min(src.length, dst.length);
-    for (let i = 0; i < matched; i += 1) {
-      animations.push(ReplacementTransform(src[i], dst[i], { runTime }));
-    }
+  for (let i = 0; i < matched; i += 1) {
+    const animation = ReplacementTransform(src[i], dst[i], { runTime });
+    animations.push(...(Array.isArray(animation) ? animation : [animation]));
+  }
     for (let i = matched; i < src.length; i += 1) {
       animations.push(...toPendingAnimations(FadeOut(src[i], { runTime })));
     }

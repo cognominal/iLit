@@ -19,7 +19,7 @@ export const pyDurationSecByScene: Record<string, number> = {
   'transforms_core:core_transform': 3.0,
   'updaters_and_always_redraw:updater_demo': 2.0,
   'geometry_and_text_primitives:geometry_text_primitives': 2.6,
-  'doubly_linked_list_deletion:dll_delete': 5.2
+  'doubly_linked_list_deletion:dll_delete': 6.8
 };
 
 export function pyDurationSecFor(scriptId: string, sceneId: string):

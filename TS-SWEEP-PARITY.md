@@ -141,11 +141,19 @@ surface and the current Svelte preview renderer.
 
 - Python: [`py/20_doubly_linked_list_deletion.py`](/Users/cog/mine/dlx_sv/py/20_doubly_linked_list_deletion.py)
 - TS: [`doublyLinkedListDeletion.ts`](/Users/cog/mine/dlx_sv/app/src/lib/ts-feature-sweep/ts/doublyLinkedListDeletion.ts)
-- Status: `Parity`
+- Status: `Partial`
 - Notes:
   The TS scene mirrors the Python scene model: same node layout, same
   bypass-link replacements, same two fade-out deletions, and the same
-  collapse order after each unlink.
+  collapse order after each unlink. Grouped `Create(...)`,
+  child-matched `ReplacementTransform(...)`, and capture-mode playback
+  now evaluate against a fresh pre-animation scene graph each frame.
+  Replacement evaluation also resolves source ids through earlier
+  completed replacements and can morph toward target mobjects that are
+  not yet in the live scene tree. The TS export now shows the same
+  later bypass-link dance that was previously missing. Remaining gap:
+  the later `ReplacementTransform(...)` phases still have small visual
+  artifacts and are not yet exact `.mp4` parity with Python.
 
 ### 04 `updaters_and_always_redraw`
 
