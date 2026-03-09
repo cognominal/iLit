@@ -1,6 +1,5 @@
 # imanim
 
-
 iManim intends to be a sveltekit app for
 interactive programmatic animations
 of programs. Compare with the definition of manim :
@@ -8,13 +7,17 @@ Manim is a Python library for creating precise, programmatic animations
 of mathematical concepts.
 
 Think of imanim as a program interactive literate notebooks.
-To bootstrap it the focus has been on the [ts feature sweep]
-(<https://sv5-manim.vercel.app/ts-sweep>)
-
-Definition of its [purpose](#ts-sweep).
+To bootstrap it the focus has been on the [ts feature sweep UI]
+(<https://sv5-manim.vercel.app/ts-sweep>) which wil be made less conspicuous on
+the chrome.
+[ts-sweep](backburner/iterative-ts-sweep.md) was designing that UI to get a
+anim engine in parity with the original python one. Moving TeX SVF and 3D is not
+there yet.
 
 iManim is currently available in a read only form at
 <https://sv5-manim.vercel.app/>
+
+We shove in [backburner](backburner) stuff which seems architecturally stable.
 
 ## Manim
 
@@ -32,39 +35,16 @@ of Python.
 The idea is to support an API akin to the manim one, but in ts instead of
 python.
 
-## ts-sweep
+## Next steps
 
-Currently the API parity with manim CE is still very low.
-The ts manim implementation is
-[manim-api.ts](/Users/cog/mine/dlx_sv/app/src/lib/manim-api.ts).
+Necessary to create a notebook system with notebooks stored on github.
 
-And there is a lot of work to make the example in /ts-sweep work.
-And some are dubious to be begin with.
+- Build a login system
+- Making it a tauri-app.
+- hosting the app somewhere once we got a minimal tauri app.
+- this implies choosing a long lasting name of the app : iLit ?
 
-But we have reached a step where incremental work becomes easier
-
-### creating an UI for iterative improvement
-
-We created a UI to show
-
-- `py` side : the original `.py` file, the resulting `.mp4` generated,
-- `ts` side : the .ts file, the interactive scene (now just time warp with a
-slider), the resulting `.mp4` generated.
-- the `ts` code mirror pane is writable so we can experiment without asking codex.
-
-State is saved browser side. Panes size, position in codemirror pane...
-At each reload after a change we restart where we left of.
-
-### getting something minimal
-
-As a first stages, we try to get feature parity from some random `.py` manim files
-codex lifted from somewhere or created out of whole cloth and the
-ts imanim files created from that.
-
-Note that with ts, the real deliverable will be a route in a sveltekit app.
-
-Added [geometryTextPrimitives](/Users/cog/mine/dlx_sv/app/src/lib/ts-feature-sweep/ts/geometryTextPrimitives.ts).
-Getting to a point we can think supporting  a notebook system.
+For the first two items see[PLAN-TAURI-AUTH](PLAN-TAURI-AUTH.md)
 
 ## notebook system
 
@@ -90,7 +70,15 @@ In this repo we don't yet try to get a studio.
 
 ## A "real" imanim script
 
-As a litmus test we want to port dlx_3x2_three_tiles.py and do an
+We want to use the Knuth's dancing link example as a litmus test for our ilit
+notebook. The current animation is  [dancing links](http://localhost:5173/ts-scenes/doubly_linked_list_deletion/dll_delete)
+and [doubly-linked-list.ts](misc/doubly-linked-list.ts
+will be the documented script.
+
+### oldy (we will repurpose it)
+
+As a litmus test we want to port [dlx_3x2_three_tiles.py](misc/dlx_3x2_three_tiles.py)
+and do an
 interactive imanim presentation about dlx to solve it.
 
 We use the [dlx](https://grokipedia.com/page/Knuth's_Algorithm_X) algorithm to
