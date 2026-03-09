@@ -28,6 +28,10 @@ coverage/
 media/texts/
 **/media/texts/
 
+# Generated partial Manim render chunks
+media/videos/**/partial_movie_files/
+**/media/videos/**/partial_movie_files/
+
 # Python generated caches
 __pycache__/
 **/__pycache__/
