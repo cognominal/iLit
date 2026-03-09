@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "dlx_sv",
+  "version": "0.1.0",
+  "identifier": "com.cognominal.dlxsv",
+  "build": {
+    "beforeDevCommand": "bun run --cwd ../app dev -- --host 127.0.0.1 --port 5173",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "bun run --cwd ../app build:server",
+    "frontendDist": "../../app/build/client"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "dlx_sv",
+        "width": 1440,
+        "height": 900,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all"
+  }
+}

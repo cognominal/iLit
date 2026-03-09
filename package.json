@@ -6,6 +6,8 @@
     "build": "bun run --cwd app build",
     "build:web": "bun run --cwd app build:web",
     "build:server": "bun run --cwd app build:server",
+    "dev:tauri": "bun scripts/tauri.ts dev",
+    "build:tauri": "bun scripts/tauri.ts build",
     "check": "bun run --cwd app check",
     "test:e2e": "bun run --cwd app test:e2e",
     "render:py-mp4": "bun run scripts/render-py-mp4.ts",
