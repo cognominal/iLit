@@ -46,3 +46,10 @@
 - Keep generated artifacts out of git (for example
   `media/ts-mp4/`, `media/py-mp4/`, and Python `__pycache__/`) via
   `.gitignore`.
+- Committed `.mp4` and `.png` artifacts exist only to support the
+  read-only Vercel site, which cannot render them on demand.
+- Those committed media artifacts may be out of date between source
+  changes because we do not want every render refresh to clutter the
+  commit history.
+- Commit rendered `.mp4` and `.png` artifacts only explicitly, when they
+  are intentionally being refreshed for deployment or review.
