@@ -53,8 +53,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
     redirectUri: workosRedirectUri(),
     state,
     codeChallenge,
-    codeChallengeMethod: 'S256',
-    screenHint: 'sign-in'
+    codeChallengeMethod: 'S256'
   })
 
   throw redirect(302, authorizationUrl)
