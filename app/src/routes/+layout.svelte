@@ -3,8 +3,19 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { tsScripts } from '$lib/ts-feature-sweep/catalog';
+  import type { AuthUser } from '$lib/types/auth';
 
-  const { children } = $props<{ children: () => unknown }>();
+  const {
+    children,
+    data
+  } = $props<{
+    children: () => unknown;
+    data: {
+      auth: {
+        user: AuthUser | null;
+      };
+    };
+  }>();
 
   const tsOptions = tsScripts.flatMap((script) =>
     script.scenes.map((scene) => ({
@@ -27,6 +38,13 @@
   const tsSceneNextLayoutMode = $derived(
     tsSceneLayoutMode === 'default' ? 'code-only' : 'default'
   );
+  const authEmail = $derived(data.auth.user?.email ?? null);
+
+  function loginHref(): string {
+    const returnTo =
+      `${page.url.pathname}${page.url.search}${page.url.hash}`;
+    return `/login?returnTo=${encodeURIComponent(returnTo)}`;
+  }
 
   async function onTsChange(event: Event): Promise<void> {
     const target = event.currentTarget as HTMLSelectElement;
@@ -98,7 +116,27 @@
             >
               Source pane
             </span>
-            <label class="ml-auto flex min-w-0 items-center gap-2 text-sm">
+            {#if authEmail}
+              <div class="ml-auto flex items-center gap-3 text-sm">
+                <span class="truncate text-slate-400">{authEmail}</span>
+                <a
+                  href="/logout"
+                  class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5
+                  text-sm text-slate-300 hover:text-cyan-300"
+                >
+                  Logout
+                </a>
+              </div>
+            {:else}
+              <a
+                href={loginHref()}
+                class="ml-auto rounded-md border border-slate-700 bg-slate-950
+                px-3 py-1.5 text-sm text-slate-300 hover:text-cyan-300"
+              >
+                Sign in with GitHub
+              </a>
+            {/if}
+            <label class="flex min-w-0 items-center gap-2 text-sm">
               <span class="text-slate-300">TS scenes</span>
               <select
                 class="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950
@@ -137,8 +175,28 @@
           >
             ts sweep
           </a>
+          {#if authEmail}
+            <div class="ml-auto flex items-center gap-3 text-sm">
+              <span class="truncate text-slate-400">{authEmail}</span>
+              <a
+                href="/logout"
+                class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5
+                text-sm text-slate-300 hover:text-cyan-300"
+              >
+                Logout
+              </a>
+            </div>
+          {:else}
+            <a
+              href={loginHref()}
+              class="ml-auto rounded-md border border-slate-700 bg-slate-950
+              px-3 py-1.5 text-sm text-slate-300 hover:text-cyan-300"
+            >
+              Sign in with GitHub
+            </a>
+          {/if}
           {#if isTsSweepRoute}
-            <label class="ml-auto flex items-center gap-2 text-sm">
+            <label class="flex items-center gap-2 text-sm">
               <span class="text-slate-300">TS scenes</span>
               <select
                 class="rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm"
