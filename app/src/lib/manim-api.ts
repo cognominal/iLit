@@ -593,6 +593,7 @@ export function flattenSceneMobjects(mobjects: Mobject[]): Mobject[] {
 const UNIT_PX = 80;
 const FRAME_X_RADIUS = 7.111111111111111;
 const FRAME_Y_RADIUS = 4;
+const DEFAULT_STROKE_WIDTH = 4;
 export const STAGE_WIDTH = FRAME_X_RADIUS * UNIT_PX * 2;
 export const STAGE_HEIGHT = FRAME_Y_RADIUS * UNIT_PX * 2;
 const CENTER_X = STAGE_WIDTH / 2;
@@ -2396,11 +2397,11 @@ export function Square(
     kind: 'square',
     x: opts.x ?? CENTER_X,
     y: opts.y ?? CENTER_Y,
-    size: opts.size,
-    width: opts.size,
-    height: opts.size,
+    size: normalizeSceneLength(opts.size) ?? opts.size,
+    width: normalizeSceneLength(opts.size) ?? opts.size,
+    height: normalizeSceneLength(opts.size) ?? opts.size,
     stroke: opts.stroke,
-    strokeWidth: opts.strokeWidth ?? 8,
+    strokeWidth: opts.strokeWidth ?? DEFAULT_STROKE_WIDTH,
     fill: 'none',
   });
 }
@@ -2448,7 +2449,9 @@ export function Rectangle(
     width: normalizeSceneLength(opts.width) ?? 140,
     height: normalizeSceneLength(opts.height) ?? 84,
     stroke: color,
-    strokeWidth: opts.stroke_width ?? opts.strokeWidth ?? 8,
+    strokeWidth: opts.stroke_width ??
+      opts.strokeWidth ??
+      DEFAULT_STROKE_WIDTH,
     fill: opts.fill_color ?? opts.fill ?? 'none',
     opacity: opts.fill_opacity ?? opts.fillOpacity ?? 1,
   });
@@ -2512,7 +2515,7 @@ export function Circle(
     y: opts.y ?? CENTER_Y,
     radius: normalizeSceneLength(opts.radius) ?? 48,
     stroke: color,
-    strokeWidth: opts.strokeWidth ?? 8,
+    strokeWidth: opts.strokeWidth ?? DEFAULT_STROKE_WIDTH,
     fill: 'none',
   });
 }
@@ -2555,7 +2558,7 @@ export function Ellipse(
         normalizeSceneLength(opts.height) ?? 96
       ) / 2,
     stroke: color,
-    strokeWidth: opts.strokeWidth ?? 8,
+    strokeWidth: opts.strokeWidth ?? DEFAULT_STROKE_WIDTH,
     fill: 'none',
   });
 }
@@ -3018,7 +3021,7 @@ export function Path(
     kind: 'path',
     points: opts.points.map((point) => fromPointLike(point)),
     stroke: opts.stroke,
-    strokeWidth: opts.strokeWidth ?? 8,
+    strokeWidth: opts.strokeWidth ?? DEFAULT_STROKE_WIDTH,
     fill: opts.fill ?? 'none',
     closed: opts.closed ?? true
   });
@@ -3065,7 +3068,9 @@ export function Polygon(
     points,
     closed: true,
     stroke: opts.color ?? opts.stroke ?? '#e2e8f0',
-    strokeWidth: opts.stroke_width ?? opts.strokeWidth ?? 6,
+    strokeWidth: opts.stroke_width ??
+      opts.strokeWidth ??
+      DEFAULT_STROKE_WIDTH,
     fill: opts.fill_color ?? opts.fill ?? 'none',
     opacity: opts.fill_opacity ?? opts.fillOpacity ?? 1,
   });
@@ -3131,7 +3136,7 @@ export function RegularPolygon(
     points,
     closed: true,
     stroke: opts?.color ?? opts?.stroke ?? '#e2e8f0',
-    strokeWidth: opts?.strokeWidth ?? 6,
+    strokeWidth: opts?.strokeWidth ?? DEFAULT_STROKE_WIDTH,
     fill: 'none',
   });
 }
@@ -3182,7 +3187,7 @@ export function Arc(
     points,
     closed: false,
     stroke: opts.color ?? opts.stroke ?? '#e2e8f0',
-    strokeWidth: opts.strokeWidth ?? 6,
+    strokeWidth: opts.strokeWidth ?? DEFAULT_STROKE_WIDTH,
   });
 }
 
@@ -3200,7 +3205,7 @@ export function Line(
   return Path(opts?.id ?? autoId('line'), {
     points: [fromPointLike(start), fromPointLike(end)],
     stroke,
-    strokeWidth: opts?.strokeWidth ?? 6,
+    strokeWidth: opts?.strokeWidth ?? DEFAULT_STROKE_WIDTH,
     closed: false,
   });
 }
@@ -3235,13 +3240,13 @@ export function Arrow(
     Line(start, end, {
       id: `${id}_shaft`,
       color,
-      strokeWidth: opts?.strokeWidth ?? 6,
+      strokeWidth: opts?.strokeWidth ?? DEFAULT_STROKE_WIDTH,
     }),
     Path(`${id}_tip`, {
       points: [left, b, right],
       stroke: color,
       fill: color,
-      strokeWidth: opts?.strokeWidth ?? 6,
+      strokeWidth: opts?.strokeWidth ?? DEFAULT_STROKE_WIDTH,
       closed: true,
     })
   );
@@ -3320,7 +3325,9 @@ export function CubicBezier(
     points,
     closed: false,
     stroke: opts?.color ?? opts?.stroke ?? '#e2e8f0',
-    strokeWidth: opts?.stroke_width ?? opts?.strokeWidth ?? 6,
+    strokeWidth: opts?.stroke_width ??
+      opts?.strokeWidth ??
+      DEFAULT_STROKE_WIDTH,
   });
 }
 

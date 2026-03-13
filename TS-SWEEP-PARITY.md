@@ -130,8 +130,12 @@ surface and the current Svelte preview renderer.
 - TS: [`positioningPrimitives.ts`](/Users/cog/mine/dlx_sv/app/src/lib/ts-feature-sweep/ts/positioningPrimitives.ts)
 - Status: `Parity`
 - Notes:
-  Already matched the original scene model closely and continues to do
-  so with the current adapter.
+  Parity here now depends on library-level fixes instead of scene-local
+  workarounds. `Square(..., { size })` now uses scene units like the
+  Python `side_length`, core geometry defaults use a Python-like stroke
+  width, the preview renderer clears `Create(...)` dash styling after
+  completion, and the TS export timing matches the Python scene's
+  `3.9s` duration.
 
 ### 18 `transform_matching_tex`
 

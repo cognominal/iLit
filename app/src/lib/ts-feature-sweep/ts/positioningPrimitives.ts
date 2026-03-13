@@ -11,7 +11,7 @@ import {
   RIGHT,
   Scene,
   Square,
-  TitleText,
+  Text,
   UL,
   UP,
   UR
@@ -20,62 +20,62 @@ import {
 export function buildPositioningPrimitivesScene(): Scene {
   const scene = new Scene(1);
 
-  const title = TitleText('title', {
-    value: 'Positioning Primitives',
-    fontSize: 34
+  const title = Text('Positioning Primitives', {
+    id: 'title',
+    fontSize: 40
   });
-  title.toEdge!(UP, 0.5);
+  title.toEdge!(UP);
 
   const origin = Square('origin', {
-    size: 72,
+    size: 0.9,
     stroke: '#22d3ee'
   });
   origin.moveTo!(ORIGIN);
 
   const right = Square('right', {
-    size: 56,
+    size: 0.7,
     stroke: '#84cc16'
   });
   right.nextTo!(origin, RIGHT, 0.6);
 
   const left = Square('left', {
-    size: 56,
+    size: 0.7,
     stroke: '#f59e0b'
   });
   left.nextTo!(origin, LEFT, 0.6);
 
   const down = Square('down', {
-    size: 56,
+    size: 0.7,
     stroke: '#f97316'
   });
   down.nextTo!(origin, DOWN, 0.6);
 
   const corners = Circle('corners', {
-    radius: 34,
+    radius: 0.45,
     stroke: '#e879f9'
   });
-  corners.toCorner!(UR, 0.7).alignTo!(origin, LEFT);
+  corners.toCorner!(UR).alignTo!(origin, LEFT);
 
   const ulDot = Circle('ul', {
-    radius: 14,
+    radius: 0.12,
     stroke: '#38bdf8'
   });
-  ulDot.toCorner!(UL, 0.8);
+  ulDot.toCorner!(UL);
 
   const drDot = Circle('dr', {
-    radius: 14,
+    radius: 0.12,
     stroke: '#fb7185'
   });
-  drDot.toCorner!(DR, 0.8);
+  drDot.toCorner!(DR);
 
   const dlDot = Circle('dl', {
-    radius: 14,
+    radius: 0.12,
     stroke: '#4ade80'
   });
-  dlDot.toCorner!(DL, 0.8);
+  dlDot.toCorner!(DL);
 
   const depth = Circle('depth', {
-    radius: 18,
+    radius: 0.18,
     stroke: '#c084fc'
   });
   depth.moveTo!(origin).shift!(OUT).shift!(IN);

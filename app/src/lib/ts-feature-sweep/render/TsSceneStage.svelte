@@ -75,15 +75,18 @@
   }
 
   function strokeDash(progress: number, length: number): string {
+    if (progress >= 0.999) return '';
     const drawn = Math.max(0.001, Math.min(1, progress)) * length;
     return `${drawn} ${length}`;
   }
 
-  function strokeOffset(progress: number, length: number): number {
+  function strokeOffset(progress: number, length: number): number | undefined {
+    if (progress >= 0.999) return undefined;
     return -Math.max(0, length * (1 - Math.max(0.001, Math.min(1, progress))));
   }
 
-  function strokeOffsetForward(progress: number, length: number): number {
+  function strokeOffsetForward(progress: number, length: number): number | undefined {
+    if (progress >= 0.999) return undefined;
     return Math.max(0, length * (1 - Math.max(0.001, Math.min(1, progress))));
   }
 
