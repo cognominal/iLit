@@ -59,3 +59,6 @@ workos-keys.txt
 .idea/
 *.swp
 *.swo
+
+# workos-keys
+workos-keys.txt
