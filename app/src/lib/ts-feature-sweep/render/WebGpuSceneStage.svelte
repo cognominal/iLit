@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    type ManimDragEvent,
     STAGE_HEIGHT,
     STAGE_WIDTH,
     type ManimPointerEvent,
@@ -19,6 +20,8 @@
     mobjects: Mobject[];
     progressById: Map<string, number>;
     bare?: boolean;
+    sourceNavigationMode?: boolean;
+    onMobjectNavigate?: (event: ManimPointerEvent) => void;
     replacements?: Array<{
       sourceId: string;
       targetId: string;
@@ -34,6 +37,8 @@
     mobjects,
     progressById,
     bare = false,
+    sourceNavigationMode = false,
+    onMobjectNavigate,
     replacements = [],
     completedReplacementSources = new Set<string>(),
     completedReplacementTargets = new Set<string>()
@@ -48,8 +53,11 @@
   let interactionVersion = $state(0);
   let hoveredMobjectId = $state<string | null>(null);
   let activeMobjectId = $state<string | null>(null);
+  let draggedMobjectId = $state<string | null>(null);
   let activePointerId = $state<number | null>(null);
   let stageCursor = $state('default');
+  let dragStartPoint = $state<Point | null>(null);
+  let dragPreviousPoint = $state<Point | null>(null);
   const boundObjects = new Map<string, Object | null>();
   const boundMobjects = new Map<string, Mobject>();
 
@@ -92,6 +100,45 @@
   const mobjectsById = $derived(
     new Map(mobjects.map((mobject) => [mobject.id, mobject]))
   );
+
+  function publishDebugSnapshot(): void {
+    if (typeof window === 'undefined') return;
+    const debugWindow = window as Window & {
+      __tsSceneDebug?: {
+        renderer: 'three';
+        mobjects: Array<{
+          id: string;
+          kind: Mobject['kind'];
+          sourceRef?: Mobject['sourceRef'];
+          x?: number;
+          y?: number;
+          width?: number;
+          height?: number;
+          radius?: number;
+          text?: string;
+          svgHref?: string;
+          points?: Point[];
+        }>;
+      };
+    };
+    if (!debugWindow.__tsSceneDebug) return;
+    debugWindow.__tsSceneDebug = {
+      renderer: 'three',
+      mobjects: mobjects.map((mobject) => ({
+        id: mobject.id,
+        kind: mobject.kind,
+        sourceRef: mobject.sourceRef ? { ...mobject.sourceRef } : undefined,
+        x: mobject.x,
+        y: mobject.y,
+        width: mobject.width,
+        height: mobject.height,
+        radius: mobject.radius,
+        text: mobject.text,
+        svgHref: mobject.svgHref,
+        points: mobject.points?.map((point) => ({ ...point }))
+      }))
+    };
+  }
 
   function posX(mobject: Mobject): number | undefined {
     return mobject.x;
@@ -154,6 +201,12 @@
     };
   }
 
+  function stageDragMobjectId(): string | null {
+    if (draggedMobjectId) return draggedMobjectId;
+    const active = activeMobjectId ? (mobjectsById.get(activeMobjectId) ?? null) : null;
+    return isDraggableMobject(active) ? active?.id ?? null : null;
+  }
+
   function updateStageCursor(nextCursor?: string, pickable = false): void {
     stageCursor = nextCursor ?? (pickable ? 'pointer' : 'default');
   }
@@ -193,6 +246,7 @@
       completedReplacementTargets
     }));
     syncRenderObjectBindings();
+    publishDebugSnapshot();
   }
 
   function pointerEventFor(
@@ -209,6 +263,30 @@
       scenePoint,
       nativeEvent,
       object3d: (object ?? webGpuRenderer?.getPrimaryObjectForMobject(mobject.id) ?? null) as never
+    };
+  }
+
+  function dragEventFor(
+    mobject: Mobject,
+    nativeEvent: PointerEvent,
+    object: Object | null,
+    startPoint: Point,
+    previousPoint: Point
+  ): ManimDragEvent | null {
+    const base = pointerEventFor(mobject, nativeEvent, object);
+    if (!base) return null;
+    return {
+      ...base,
+      dragStartPoint: { ...startPoint },
+      dragPreviousPoint: { ...previousPoint },
+      dragDelta: {
+        x: base.scenePoint.x - previousPoint.x,
+        y: base.scenePoint.y - previousPoint.y
+      },
+      dragTotalDelta: {
+        x: base.scenePoint.x - startPoint.x,
+        y: base.scenePoint.y - startPoint.y
+      }
     };
   }
 
@@ -231,13 +309,56 @@
     rerenderAfterInteraction();
   }
 
+  function isDraggableMobject(mobject: Mobject | null): boolean {
+    return Boolean(
+      mobject &&
+      (
+        mobject.draggable ||
+        mobject.onDragStart ||
+        mobject.onDrag ||
+        mobject.onDragEnd
+      )
+    );
+  }
+
+  function invokeDragCallback(
+    mobject: Mobject | null,
+    callback: 'onDragStart' | 'onDrag' | 'onDragEnd',
+    nativeEvent: PointerEvent,
+    object: Object | null,
+    startPoint: Point,
+    previousPoint: Point
+  ): ManimDragEvent | null {
+    if (!mobject) return null;
+    if (!mobject[callback]) return null;
+    const event = dragEventFor(mobject, nativeEvent, object, startPoint, previousPoint);
+    if (!event) return null;
+    mobject[callback]?.(event);
+    rerenderAfterInteraction();
+    return event;
+  }
+
+  function applyDefaultDrag(mobject: Mobject, event: ManimDragEvent): void {
+    const center = mobject.getCenter?.() ?? {
+      x: mobject.x ?? event.scenePoint.x,
+      y: mobject.y ?? event.scenePoint.y
+    };
+    mobject.moveTo?.({
+      x: center.x + event.dragDelta.x,
+      y: center.y + event.dragDelta.y
+    });
+    rerenderAfterInteraction();
+  }
+
   function resolvePointerTarget(event: PointerEvent): {
     mobject: Mobject | null;
     object: Object | null;
     cursor?: string;
     pickable: boolean;
   } {
-    const object = webGpuRenderer?.hitTest(event.clientX, event.clientY) ?? null;
+    const object = webGpuRenderer?.hitTest(event.clientX, event.clientY, {
+      includeNonPickable: sourceNavigationMode
+    }) ?? null;
     const mobjectId = object?.userData?.mobjectId;
     return {
       mobject: mobjectId ? (mobjectsById.get(mobjectId) ?? null) : null,
@@ -256,20 +377,29 @@
   ): void {
     const current = hoveredMobjectId ? (mobjectsById.get(hoveredMobjectId) ?? null) : null;
     if (current?.id === nextMobject?.id) {
-      updateStageCursor(
-        nextMobject?.cursor ?? cursor,
-        pickable || Boolean(nextMobject)
-      );
+      const nextCursor = sourceNavigationMode && nextMobject
+        ? 'pointer'
+        : nextMobject?.cursor ?? cursor;
+      const nextPickable = sourceNavigationMode
+        ? Boolean(nextMobject)
+        : pickable || Boolean(nextMobject);
+      updateStageCursor(nextCursor, nextPickable);
       return;
     }
-    if (current) {
+    if (current && !sourceNavigationMode) {
       invokePointerCallback(current, 'onPointerLeave', nativeEvent);
     }
     hoveredMobjectId = nextMobject?.id ?? null;
-    if (nextMobject) {
+    if (nextMobject && !sourceNavigationMode) {
       invokePointerCallback(nextMobject, 'onPointerEnter', nativeEvent, object);
     }
-    updateStageCursor(nextMobject?.cursor ?? cursor, pickable || Boolean(nextMobject));
+    const nextCursor = sourceNavigationMode && nextMobject
+      ? 'pointer'
+      : nextMobject?.cursor ?? cursor;
+    const nextPickable = sourceNavigationMode
+      ? Boolean(nextMobject)
+      : pickable || Boolean(nextMobject);
+    updateStageCursor(nextCursor, nextPickable);
   }
 
   function handlePointerMove(event: PointerEvent): void {
@@ -282,6 +412,40 @@
       target.pickable
     );
     const active = activeMobjectId ? (mobjectsById.get(activeMobjectId) ?? null) : null;
+    if (sourceNavigationMode) {
+      return;
+    }
+    if (
+      active &&
+      dragStartPoint &&
+      dragPreviousPoint &&
+      isDraggableMobject(active)
+    ) {
+      const dragEvent = dragEventFor(
+        active,
+        event,
+        target.object,
+        dragStartPoint,
+        dragPreviousPoint
+      );
+      if (dragEvent) {
+        draggedMobjectId = active.id;
+        if (active.onDrag) {
+          invokeDragCallback(
+            active,
+            'onDrag',
+            event,
+            target.object,
+            dragStartPoint,
+            dragPreviousPoint
+          );
+        } else if (active.draggable) {
+          applyDefaultDrag(active, dragEvent);
+        }
+        dragPreviousPoint = { ...dragEvent.scenePoint };
+        updateStageCursor(active.cursor ?? 'grabbing', true);
+      }
+    }
     invokePointerCallback(active ?? target.mobject, 'onPointerMove', event, target.object);
   }
 
@@ -296,12 +460,36 @@
     );
     activePointerId = event.pointerId;
     activeMobjectId = target.mobject?.id ?? null;
+    const startPoint = scenePointFromEvent(event);
+    dragStartPoint = startPoint ? { ...startPoint } : null;
+    dragPreviousPoint = startPoint ? { ...startPoint } : null;
+    draggedMobjectId = null;
     if (activeMobjectId && stageEl?.setPointerCapture) {
       stageEl.setPointerCapture(event.pointerId);
     }
+    if (sourceNavigationMode) {
+      updateStageCursor(target.mobject ? 'pointer' : undefined, Boolean(target.mobject));
+      return;
+    }
     invokePointerCallback(target.mobject, 'onPointerDown', event, target.object);
+    if (
+      target.mobject &&
+      startPoint &&
+      isDraggableMobject(target.mobject)
+    ) {
+      draggedMobjectId = target.mobject.id;
+      invokeDragCallback(
+        target.mobject,
+        'onDragStart',
+        event,
+        target.object,
+        startPoint,
+        startPoint
+      );
+      draggedMobjectId = target.mobject.id;
+    }
     updateStageCursor(
-      target.mobject?.cursor ?? target.cursor,
+      target.mobject?.cursor ?? (isDraggableMobject(target.mobject) ? 'grabbing' : target.cursor),
       target.pickable || Boolean(target.mobject)
     );
   }
@@ -309,7 +497,46 @@
   function handlePointerUp(event: PointerEvent): void {
     const active = activeMobjectId ? (mobjectsById.get(activeMobjectId) ?? null) : null;
     const target = resolvePointerTarget(event);
+    if (sourceNavigationMode) {
+      const activeEvent = active ? pointerEventFor(active, event, target.object) : null;
+      if (active && active.id === target.mobject?.id && activeEvent) {
+        onMobjectNavigate?.(activeEvent);
+      }
+      if (activePointerId !== null && stageEl?.releasePointerCapture) {
+        try {
+          stageEl.releasePointerCapture(activePointerId);
+        } catch {}
+      }
+      activePointerId = null;
+      activeMobjectId = null;
+      draggedMobjectId = null;
+      dragStartPoint = null;
+      dragPreviousPoint = null;
+      setHoveredMobject(
+        target.mobject,
+        event,
+        target.object,
+        target.cursor,
+        target.pickable
+      );
+      return;
+    }
     invokePointerCallback(active ?? target.mobject, 'onPointerUp', event, target.object);
+    if (
+      active &&
+      dragStartPoint &&
+      dragPreviousPoint &&
+      isDraggableMobject(active)
+    ) {
+      invokeDragCallback(
+        active,
+        'onDragEnd',
+        event,
+        target.object,
+        dragStartPoint,
+        dragPreviousPoint
+      );
+    }
     if (activePointerId !== null && stageEl?.releasePointerCapture) {
       try {
         stageEl.releasePointerCapture(activePointerId);
@@ -317,6 +544,9 @@
     }
     activePointerId = null;
     activeMobjectId = null;
+    draggedMobjectId = null;
+    dragStartPoint = null;
+    dragPreviousPoint = null;
     setHoveredMobject(
       target.mobject,
       event,
@@ -328,7 +558,7 @@
 
   function handlePointerLeave(event: PointerEvent): void {
     setHoveredMobject(null, event, null, undefined, false);
-    if (!activeMobjectId) {
+    if (!activeMobjectId && !draggedMobjectId) {
       updateStageCursor(undefined, false);
     }
   }
@@ -396,6 +626,7 @@
   data-renderer={ready ? rendererBackend : failed ? 'error' : 'initializing'}
   data-hover-mobject-id={hoveredMobjectId ?? undefined}
   data-active-mobject-id={activeMobjectId ?? undefined}
+  data-drag-mobject-id={stageDragMobjectId() ?? undefined}
   role={ready ? 'img' : undefined}
   aria-label={ready ? 'TS scene stage' : undefined}
   class={`relative w-full overflow-hidden ${bare

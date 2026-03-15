@@ -34,6 +34,13 @@ export type ManimPointerEvent = {
   object3d?: Object3D;
 };
 
+export type ManimDragEvent = ManimPointerEvent & {
+  dragStartPoint: Point;
+  dragPreviousPoint: Point;
+  dragDelta: Point;
+  dragTotalDelta: Point;
+};
+
 export type Mobject = {
   [index: number]: Mobject | undefined;
   id: string;
@@ -93,6 +100,9 @@ export type Mobject = {
   onPointerUp?: (event: ManimPointerEvent) => void;
   onPointerEnter?: (event: ManimPointerEvent) => void;
   onPointerLeave?: (event: ManimPointerEvent) => void;
+  onDragStart?: (event: ManimDragEvent) => void;
+  onDrag?: (event: ManimDragEvent) => void;
+  onDragEnd?: (event: ManimDragEvent) => void;
   bindRenderObject?: (object: Object3D | null) => void;
   become?: (target: Mobject) => Mobject;
   moveTo?: (target: PointLike | Mobject) => Mobject;

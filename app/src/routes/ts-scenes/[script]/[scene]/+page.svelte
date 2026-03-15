@@ -11,6 +11,7 @@
   import { FRAME_STEP_SEC } from '$lib/feature-sweep/time-wrap/core';
   import {
     evaluateSceneAtTime,
+    type ManimPointerEvent,
     type Mobject,
     type Point,
     type Scene
@@ -63,6 +64,12 @@
   type SceneDebugSnapshot = {
     renderer: 'three';
     mobjects: DebugMobject[];
+    tsEditor?: {
+      selectionAnchor: number;
+      selectionHead: number;
+      selectedLine: number;
+      navigationMode: 'inactive' | 'goToLine';
+    };
   };
 
   let timeline = $state(createTimelineControllerState(6, FRAME_STEP_SEC));
@@ -105,6 +112,8 @@
   let saveMessage = $state('');
   let pyEditorViewState = $state<CodeMirrorViewState | null>(null);
   let tsEditorViewState = $state<CodeMirrorViewState | null>(null);
+  let tsEditorFocusRequestKey = $state(0);
+  let sourceNavigationMode = $state<'inactive' | 'goToLine'>('inactive');
 
   let scene = $state<Scene | null>(null);
   let sceneResolved = $state(false);
@@ -172,6 +181,57 @@
       svgHref: mobject.svgHref,
       points: mobject.points?.map((point) => ({ ...point }))
     };
+  }
+
+  function normalizePath(path: string): string {
+    return path.replaceAll('\\', '/');
+  }
+
+  function docPositionForLine(text: string, line: number): number {
+    if (line <= 1) return 0;
+    let currentLine = 1;
+    for (let index = 0; index < text.length; index += 1) {
+      if (currentLine === line) return index;
+      if (text[index] === '\n') currentLine += 1;
+    }
+    return text.length;
+  }
+
+  function lineForPosition(text: string, position: number): number {
+    const bounded = Math.max(0, Math.min(position, text.length));
+    let line = 1;
+    for (let index = 0; index < bounded; index += 1) {
+      if (text[index] === '\n') line += 1;
+    }
+    return line;
+  }
+
+  function goToTsSourceLine(line: number): void {
+    const currentText = tsEditorText || tsBaseText || data.tsSourceText;
+    const anchor = docPositionForLine(currentText, line);
+    tsEditorViewState = {
+      selectionAnchor: anchor,
+      selectionHead: anchor,
+      scrollTop: Math.max(0, (line - 3) * 24),
+      scrollLeft: 0
+    };
+    tsEditorFocusRequestKey += 1;
+  }
+
+  function onStageMobjectNavigate(event: ManimPointerEvent): void {
+    if (sourceNavigationMode !== 'goToLine') return;
+    const sourceRef = event.sourceRef;
+    if (!sourceRef) return;
+    const currentPath = normalizePath(data.tsSourcePath);
+    const sourcePath = normalizePath(sourceRef.file);
+    if (
+      currentPath !== sourcePath &&
+      !currentPath.endsWith(`/${sourcePath}`) &&
+      !currentPath.endsWith(sourcePath)
+    ) {
+      return;
+    }
+    goToTsSourceLine(sourceRef.line);
   }
 
   function dispatch(command: TimelineCommand): void {
@@ -394,7 +454,16 @@
     };
     debugWindow.__tsSceneDebug = {
       renderer: 'three',
-      mobjects: evaluatedScene.mobjects.map(toDebugMobject)
+      mobjects: evaluatedScene.mobjects.map(toDebugMobject),
+      tsEditor: {
+        selectionAnchor: tsEditorViewState?.selectionAnchor ?? 0,
+        selectionHead: tsEditorViewState?.selectionHead ?? 0,
+        selectedLine: lineForPosition(
+          tsEditorText || tsBaseText || data.tsSourceText,
+          tsEditorViewState?.selectionHead ?? 0
+        ),
+        navigationMode: sourceNavigationMode
+      }
     };
     return () => {
       delete debugWindow.__tsSceneDebug;
@@ -725,6 +794,8 @@
         mobjects={evaluatedScene.mobjects}
         progressById={evaluatedScene.progressById}
         bare={true}
+        sourceNavigationMode={sourceNavigationMode === 'goToLine'}
+        onMobjectNavigate={onStageMobjectNavigate}
         replacements={evaluatedScene.replacements}
         completedReplacementSources={evaluatedScene.completedReplacementSources}
         completedReplacementTargets={evaluatedScene.completedReplacementTargets}
@@ -836,6 +907,22 @@
                 >
                   Reset
                 </button>
+                <button
+                  class={`rounded-md border px-3 py-1.5 text-sm ${
+                    sourceNavigationMode === 'goToLine'
+                      ? 'border-cyan-600 bg-cyan-950/40 text-cyan-300'
+                      : 'border-slate-700 bg-slate-950 text-slate-200'
+                  }`}
+                  onclick={() => {
+                    sourceNavigationMode = sourceNavigationMode === 'goToLine'
+                      ? 'inactive'
+                      : 'goToLine';
+                  }}
+                >
+                  {sourceNavigationMode === 'goToLine'
+                    ? 'go to line'
+                    : 'inactive'}
+                </button>
                 {#if !mp4Status?.deploymentReadOnly}
                   <button
                     class="rounded-md border border-emerald-700 bg-emerald-950/60
@@ -881,6 +968,8 @@
               <WebGpuSceneStage
                 mobjects={evaluatedScene.mobjects}
                 progressById={evaluatedScene.progressById}
+                sourceNavigationMode={sourceNavigationMode === 'goToLine'}
+                onMobjectNavigate={onStageMobjectNavigate}
                 replacements={evaluatedScene.replacements}
                 completedReplacementSources={evaluatedScene.completedReplacementSources}
                 completedReplacementTargets={evaluatedScene.completedReplacementTargets}
@@ -1044,6 +1133,7 @@
                     <ReadOnlyCodeMirror
                       value={data.pySourceText}
                       language="python"
+                      testId="py-code-editor"
                       heightClass="h-full"
                       initialViewState={pyEditorViewState}
                       onViewStateChange={onPyEditorViewStateChange}
@@ -1127,8 +1217,10 @@
                     <ReadOnlyCodeMirror
                       value={tsBaseText}
                       language="typescript"
+                      testId="ts-code-editor"
                       heightClass="h-full"
                       editable={tsEditorEditable}
+                      focusRequestKey={tsEditorFocusRequestKey}
                       initialViewState={tsEditorViewState}
                       onChange={onTsEditorChange}
                       onViewStateChange={onTsEditorViewStateChange}
@@ -1186,13 +1278,14 @@
                     </button>
                   </div>
                   {#key `py:code-only:${data.script.id}:${data.scene.id}`}
-                    <ReadOnlyCodeMirror
-                      value={data.pySourceText}
-                      language="python"
-                      heightClass="h-full"
-                      initialViewState={pyEditorViewState}
-                      onViewStateChange={onPyEditorViewStateChange}
-                    />
+                <ReadOnlyCodeMirror
+                  value={data.pySourceText}
+                  language="python"
+                  testId="py-code-editor"
+                  heightClass="h-full"
+                  initialViewState={pyEditorViewState}
+                  onViewStateChange={onPyEditorViewStateChange}
+                />
                   {/key}
                 </div>
               </aside>
@@ -1271,14 +1364,16 @@
                     </button>
                   </div>
                   {#key `ts:code-only:${data.script.id}:${data.scene.id}:${tsSourceMtimeMs ?? 0}`}
-                    <ReadOnlyCodeMirror
-                      value={tsBaseText}
-                      language="typescript"
-                      heightClass="h-full"
-                      editable={tsEditorEditable}
-                      initialViewState={tsEditorViewState}
-                      onChange={onTsEditorChange}
-                      onViewStateChange={onTsEditorViewStateChange}
+                <ReadOnlyCodeMirror
+                  value={tsBaseText}
+                  language="typescript"
+                  testId="ts-code-editor"
+                  heightClass="h-full"
+                  editable={tsEditorEditable}
+                  focusRequestKey={tsEditorFocusRequestKey}
+                  initialViewState={tsEditorViewState}
+                  onChange={onTsEditorChange}
+                  onViewStateChange={onTsEditorViewStateChange}
                     />
                   {/key}
                 </div>

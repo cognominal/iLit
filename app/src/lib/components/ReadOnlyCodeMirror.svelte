@@ -21,6 +21,8 @@
     language,
     heightClass = 'h-72',
     editable = false,
+    testId,
+    focusRequestKey = 0,
     onChange,
     initialViewState,
     onViewStateChange
@@ -29,6 +31,8 @@
     language: Language;
     heightClass?: string;
     editable?: boolean;
+    testId?: string;
+    focusRequestKey?: number;
     onChange?: (next: string) => void;
     initialViewState?: CodeMirrorViewState | null;
     onViewStateChange?: (next: CodeMirrorViewState) => void;
@@ -40,6 +44,7 @@
   let lastDoc = '';
   let lastLanguage: Language | null = null;
   let lastEditable: boolean | null = null;
+  let lastFocusRequestKey = 0;
   let pendingScrollFrame = 0;
 
   function clampPos(pos: number, docLength: number): number {
@@ -149,6 +154,18 @@
     applyViewState(initialViewState ?? null);
   });
 
+  $effect(() => {
+    if (!view) return;
+    if (focusRequestKey === lastFocusRequestKey) return;
+    lastFocusRequestKey = focusRequestKey;
+    const head = view.state.selection.main.head;
+    view.dispatch({
+      effects: EditorView.scrollIntoView(head, { y: 'center' }),
+      annotations: syncAnnotation.of(true),
+    });
+    view.focus();
+  });
+
   onDestroy(() => {
     if (browser) {
       cancelAnimationFrame(pendingScrollFrame);
@@ -158,7 +175,10 @@
   });
 </script>
 
-<div class={`${heightClass} overflow-hidden rounded-lg border border-slate-700`}>
+<div
+  data-testid={testId}
+  class={`${heightClass} overflow-hidden rounded-lg border border-slate-700`}
+>
   <div bind:this={host} class="h-full overflow-hidden"></div>
 </div>
 

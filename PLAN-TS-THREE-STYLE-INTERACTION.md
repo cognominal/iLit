@@ -423,6 +423,141 @@ type ManimPointerEvent = {
 };
 ```
 
+### 6. Source Navigation Mode
+
+Add a source-navigation interaction mode for the TS scene route so a
+click on a rendered `Mobject` can move the TypeScript CodeMirror pane to
+the line where that `Mobject` was created.
+
+This mode depends on the source-provenance id and `sourceRef` work from
+phase 1.
+
+#### Goal
+
+When the mode is enabled, clicking a rendered object should:
+
+- resolve the clicked `Mobject`
+- read its `sourceRef.file` and `sourceRef.line`
+- focus the TypeScript source pane
+- scroll CodeMirror to that line
+- place the editor selection on or near the creation line
+
+This is an inspection workflow, not an editing gesture.
+
+#### UI Contract
+
+In the TS scene route controls, add a toggle button immediately to the
+left of `lowres`.
+
+The button label should be one of:
+
+- `go to line`
+- `inactive`
+
+Expected behavior:
+
+- `inactive` means normal pointer interaction mode
+- `go to line` means click-to-source-navigation mode is armed
+- the label itself communicates the current state
+
+Recommended detail:
+
+- keep this toggle route-local, not global
+- preserve it only for the current TS scene page unless there is a later
+  reason to persist it
+
+#### Behavior Rules
+
+When the mode is `go to line`:
+
+- clicking a pickable rendered object should not perform ordinary object
+  interaction for that click
+- instead it should navigate the TS CodeMirror pane to the authored
+  source line for that `Mobject`
+- hover feedback may remain active
+- drag should not start while this mode is armed
+
+When the mode is `inactive`:
+
+- existing hover, click, and drag behavior should continue to work
+
+If the clicked object has no `sourceRef`:
+
+- do nothing destructive
+- optionally surface a small non-blocking status message later, but the
+  first slice may silently no-op
+
+If the `sourceRef.file` does not match the visible TS pane source:
+
+- for the current first slice, only navigate when the file matches the
+  currently displayed TS source
+- cross-file navigation can be deferred
+
+#### Matching Rules
+
+For the current TS scene page, line navigation should use:
+
+- `mobject.sourceRef.file`
+- `mobject.sourceRef.line`
+
+and not parse the encoded id string unless `sourceRef` is missing.
+
+Reason:
+
+- `sourceRef` is structured and easier to trust
+- line navigation should not depend on string parsing when structured
+  metadata already exists
+
+#### Editor Integration
+
+The target integration point is the existing TS CodeMirror pane in:
+
+- `app/src/routes/ts-scenes/[script]/[scene]/+page.svelte`
+
+The implementation should:
+
+- expose a helper that scrolls the TS editor to a 1-based line
+- map the line to a document position
+- dispatch a CodeMirror selection/scroll effect
+
+Preferred first-slice behavior:
+
+- move the primary selection to the first non-whitespace character of
+  the target line
+- scroll that line into the vertical center when practical
+
+#### Interaction Precedence
+
+When source-navigation mode is armed, click precedence should be:
+
+1. resolve clicked retained render object
+2. resolve `Mobject`
+3. resolve `sourceRef`
+4. navigate CodeMirror
+5. stop normal click/drag handling for that gesture
+
+This mode should take precedence over:
+
+- `onPointerDown`
+- `onPointerUp`
+- default drag behavior for `draggable`
+
+for the click that triggers navigation.
+
+#### Validation
+
+The first validation slice should cover:
+
+- toggling from `inactive` to `go to line`
+- clicking the square in `mobjectsBasics`
+- verifying the TS editor selection moves to the square creation line
+- toggling back to `inactive`
+- verifying drag still works after leaving navigation mode
+
+Suggested first e2e target:
+
+- `app/tests/e2e/mobjects-time-wrap.spec.ts`
+
 ## Identity Rules
 
 These rules are mandatory.

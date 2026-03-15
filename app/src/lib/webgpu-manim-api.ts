@@ -261,7 +261,10 @@ function isPickableMobject(mobject: Mobject): boolean {
       mobject.onPointerMove ||
       mobject.onPointerUp ||
       mobject.onPointerEnter ||
-      mobject.onPointerLeave
+      mobject.onPointerLeave ||
+      mobject.onDragStart ||
+      mobject.onDrag ||
+      mobject.onDragEnd
   );
 }
 
@@ -1300,17 +1303,25 @@ export class WebGPUManimRenderer {
     return this.objectByMobjectId.get(mobjectId) ?? null;
   }
 
-  hitTest(clientX: number, clientY: number): LayerMetaObject | null {
+  hitTest(
+    clientX: number,
+    clientY: number,
+    opts?: { includeNonPickable?: boolean }
+  ): LayerMetaObject | null {
     if (!this.renderer) return null;
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return null;
     const x = ((clientX - rect.left) / rect.width) * 2 - 1;
     const y = -(((clientY - rect.top) / rect.height) * 2 - 1);
     this.raycaster.setFromCamera(new Vector2(x, y), this.camera);
-    const hits = this.raycaster.intersectObjects(
-      [...this.geometryRoot.children, ...this.texturedRoot.children],
-      true
-    ).filter((hit) => hit.object.userData?.pickable);
+    const hits = this.raycaster
+      .intersectObjects(
+        [...this.geometryRoot.children, ...this.texturedRoot.children],
+        true
+      )
+      .filter((hit) =>
+        opts?.includeNonPickable ? true : hit.object.userData?.pickable
+      );
     if (hits.length === 0) return null;
     hits.sort(
       (left, right) => (right.object.renderOrder ?? 0) - (left.object.renderOrder ?? 0)

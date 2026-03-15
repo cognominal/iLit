@@ -38,13 +38,14 @@ export function buildMobjectsBasicsScene(): Scene {
     stroke: '#F72585'
   });
   circle.interactive = true;
+  circle.draggable = true;
   circle.cursor = 'crosshair';
   circle.userData = { role: 'circle' };
-  circle.onPointerDown = ({ mobject }) => {
+  circle.onDragStart = ({ mobject }) => {
     mobject.cursor = 'grabbing';
     mobject.setFill?.('#F72585', 0.22);
   };
-  circle.onPointerUp = ({ mobject }) => {
+  circle.onDragEnd = ({ mobject }) => {
     mobject.cursor = 'crosshair';
     mobject.setFill?.('none', 0);
   };

@@ -23,6 +23,12 @@ export type DebugMobject = {
 type SceneDebugSnapshot = {
   renderer: 'three';
   mobjects: DebugMobject[];
+  tsEditor?: {
+    selectionAnchor: number;
+    selectionHead: number;
+    selectedLine: number;
+    navigationMode: 'inactive' | 'goToLine';
+  };
 };
 
 export async function readSceneDebug(
