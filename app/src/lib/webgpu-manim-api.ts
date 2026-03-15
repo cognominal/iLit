@@ -7,6 +7,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   OrthographicCamera,
+  Raycaster,
   Scene as ThreeScene,
   Shape,
   ShapeGeometry,
@@ -28,6 +29,7 @@ import {
   STAGE_HEIGHT,
   STAGE_WIDTH,
   type Mobject,
+  type MobjectSourceRef,
   type Point
 } from '$lib/manim';
 
@@ -48,6 +50,11 @@ export type WebGpuSceneInput = {
 
 type GeometryLayer = {
   key: string;
+  mobjectId: string;
+  sourceRef?: MobjectSourceRef;
+  pickable: boolean;
+  cursor?: string;
+  userData?: Record<string, unknown>;
   order: number;
   zIndex: number;
   fillPoints: Point[];
@@ -62,6 +69,11 @@ type GeometryLayer = {
 
 type TexturedLayer = {
   key: string;
+  mobjectId: string;
+  sourceRef?: MobjectSourceRef;
+  pickable: boolean;
+  cursor?: string;
+  userData?: Record<string, unknown>;
   order: number;
   zIndex: number;
   x: number;
@@ -93,8 +105,25 @@ type TextureEntry = {
   promise?: Promise<void>;
 };
 
+type LayerInteractionMeta = {
+  mobjectId: string;
+  sourceRef?: MobjectSourceRef;
+  pickable: boolean;
+  cursor?: string;
+  userData?: Record<string, unknown>;
+};
+
 type Line2WithWidth = Line2NodeMaterial & { linewidth: number };
 type ThreeRenderer = WebGPURenderer | WebGLRenderer;
+type LayerMetaObject = Object3D & {
+  userData: {
+    mobjectId?: string;
+    sourceRef?: MobjectSourceRef;
+    pickable?: boolean;
+    cursor?: string;
+    userData?: Record<string, unknown>;
+  };
+};
 
 function lerpNumber(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -221,6 +250,29 @@ function effectiveStrokeWidth(mobject: Mobject): number {
   const scaleY = Math.abs((mobject.scaleFactor ?? 1) * (mobject.stretchY ?? 1));
   const scale = Math.max(0.001, (scaleX + scaleY) / 2);
   return (mobject.strokeWidth ?? 1) * scale;
+}
+
+function isPickableMobject(mobject: Mobject): boolean {
+  return Boolean(
+    mobject.interactive ||
+      mobject.draggable ||
+      mobject.cursor ||
+      mobject.onPointerDown ||
+      mobject.onPointerMove ||
+      mobject.onPointerUp ||
+      mobject.onPointerEnter ||
+      mobject.onPointerLeave
+  );
+}
+
+function layerInteractionMetaForMobject(mobject: Mobject): LayerInteractionMeta {
+  return {
+    mobjectId: mobject.id,
+    sourceRef: mobject.sourceRef ? { ...mobject.sourceRef } : undefined,
+    pickable: isPickableMobject(mobject),
+    cursor: mobject.cursor,
+    userData: mobject.userData ? { ...mobject.userData } : undefined
+  };
 }
 
 function rectPoints(mobject: Mobject): Point[] {
@@ -440,6 +492,7 @@ function buildTextTextureRequest(
 
   return {
     key: mobject.id,
+    ...layerInteractionMetaForMobject(mobject),
     order: 0,
     zIndex: mobject.zIndex ?? 0,
     x,
@@ -542,6 +595,7 @@ function buildMathTextureRequest(
     const heightPx = Math.max(2, Math.ceil(worldHeight * dpr));
     return {
       key: mobject.id,
+      ...layerInteractionMetaForMobject(mobject),
       order: 0,
       zIndex: mobject.zIndex ?? 0,
       x,
@@ -585,6 +639,7 @@ function buildMathTextureRequest(
   const heightPx = Math.max(2, Math.ceil(worldHeight * dpr));
   return {
     key: mobject.id,
+    ...layerInteractionMetaForMobject(mobject),
     order: 0,
     zIndex: mobject.zIndex ?? 0,
     x,
@@ -630,6 +685,7 @@ function buildSvgTextureRequest(
   const href = new URL(mobject.svgHref, window.location.href).href;
   return {
     key: mobject.id,
+    ...layerInteractionMetaForMobject(mobject),
     order: 0,
     zIndex: mobject.zIndex ?? 0,
     x: mobject.x ?? STAGE_WIDTH / 2,
@@ -689,6 +745,7 @@ function geometryLayerForMobject(
   const strokePoints = trimPathPoints(transformed, closed, drawProgress);
   return {
     key: mobject.id,
+    ...layerInteractionMetaForMobject(mobject),
     order,
     zIndex: mobject.zIndex ?? 0,
     fillPoints: transformed,
@@ -726,6 +783,15 @@ export function buildWebGpuSnapshot(
     if (interpolated.length === 0) continue;
     geometryLayers.push({
       key: `${replacement.sourceId}:${replacement.targetId}:${order}`,
+      mobjectId: to.id,
+      sourceRef: to.sourceRef ? { ...to.sourceRef } : (
+        from.sourceRef ? { ...from.sourceRef } : undefined
+      ),
+      pickable: isPickableMobject(from) || isPickableMobject(to),
+      cursor: to.cursor ?? from.cursor,
+      userData: to.userData
+        ? { ...to.userData }
+        : (from.userData ? { ...from.userData } : undefined),
       order,
       zIndex: Math.max(from.zIndex ?? 0, to.zIndex ?? 0),
       fillPoints: interpolated,
@@ -799,6 +865,37 @@ function disposeObject(object: Object3D): void {
   });
 }
 
+function applyLayerMetaToObject(
+  object: Object3D,
+  layer: GeometryLayer | TexturedLayer
+): void {
+  object.userData = {
+    ...object.userData,
+    mobjectId: layer.mobjectId,
+    sourceRef: layer.sourceRef ? { ...layer.sourceRef } : undefined,
+    pickable: layer.pickable,
+    cursor: layer.cursor,
+    userData: layer.userData ? { ...layer.userData } : undefined
+  };
+}
+
+function sameSourceRef(
+  left: MobjectSourceRef | undefined,
+  right: MobjectSourceRef | undefined
+): boolean {
+  return left?.file === right?.file &&
+    left?.line === right?.line &&
+    left?.column === right?.column &&
+    left?.label === right?.label;
+}
+
+function sameUserData(
+  left: Record<string, unknown> | undefined,
+  right: Record<string, unknown> | undefined
+): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
 function linePositions(points: Point[], closed: boolean): number[] {
   const positions: number[] = [];
   const drawable = closed && points.length > 1
@@ -841,6 +938,10 @@ export class WebGPUManimRenderer {
   private rerenderQueued = false;
   private viewportWidth = STAGE_WIDTH;
   private viewportHeight = STAGE_HEIGHT;
+  private geometryObjects = new Map<string, Group>();
+  private texturedObjects = new Map<string, Sprite>();
+  private objectByMobjectId = new Map<string, Object3D>();
+  private raycaster = new Raycaster();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -948,90 +1049,291 @@ export class WebGPUManimRenderer {
     return null;
   }
 
+  private removeGeometryLayer(key: string): void {
+    const group = this.geometryObjects.get(key);
+    if (!group) return;
+    this.geometryRoot.remove(group);
+    disposeObject(group);
+    this.geometryObjects.delete(key);
+  }
+
+  private removeTexturedLayer(key: string): void {
+    const sprite = this.texturedObjects.get(key);
+    if (!sprite) return;
+    this.texturedRoot.remove(sprite);
+    disposeObject(sprite);
+    this.texturedObjects.delete(key);
+  }
+
+  private pruneMobjectBindings(snapshot: WebGpuSnapshot): void {
+    const validIds = new Set<string>();
+    for (const layer of snapshot.geometryLayers) validIds.add(layer.mobjectId);
+    for (const layer of snapshot.texturedLayers) validIds.add(layer.mobjectId);
+    for (const id of [...this.objectByMobjectId.keys()]) {
+      if (!validIds.has(id)) {
+        this.objectByMobjectId.delete(id);
+      }
+    }
+  }
+
+  private syncObjectBindings(layer: GeometryLayer | TexturedLayer, object: Object3D): void {
+    this.objectByMobjectId.set(layer.mobjectId, object);
+  }
+
+  private ensureFillMesh(group: Group, layer: GeometryLayer, renderOrder: number): void {
+    const existing = group.getObjectByName('fill');
+    if (
+      !layer.fill ||
+      layer.fill === 'none' ||
+      layer.fillOpacity <= 0 ||
+      layer.fillPoints.length < 3 ||
+      !layer.closed
+    ) {
+      if (existing) {
+        group.remove(existing);
+        disposeObject(existing);
+      }
+      return;
+    }
+    const shape = shapeFor(layer.fillPoints);
+    if (!shape) return;
+    const geometry = new ShapeGeometry(shape);
+    const materialProps = {
+      color: layer.fill,
+      depthTest: false,
+      depthWrite: false,
+      opacity: layer.fillOpacity,
+      side: DoubleSide,
+      transparent: layer.fillOpacity < 1
+    } as const;
+    if (existing instanceof Mesh) {
+      existing.geometry.dispose();
+      existing.geometry = geometry;
+      const material = existing.material as MeshBasicMaterial;
+      material.color.set(layer.fill);
+      material.opacity = layer.fillOpacity;
+      material.transparent = layer.fillOpacity < 1;
+      material.needsUpdate = true;
+      existing.renderOrder = renderOrder;
+      applyLayerMetaToObject(existing, layer);
+      return;
+    }
+    if (existing) {
+      group.remove(existing);
+      disposeObject(existing);
+    }
+    const mesh = new Mesh(geometry, new MeshBasicMaterial(materialProps));
+    mesh.name = 'fill';
+    mesh.renderOrder = renderOrder;
+    applyLayerMetaToObject(mesh, layer);
+    group.add(mesh);
+  }
+
+  private ensurePickMesh(group: Group, layer: GeometryLayer, renderOrder: number): void {
+    const existing = group.getObjectByName('pick');
+    if (!layer.pickable || !layer.closed || layer.fillPoints.length < 3) {
+      if (existing) {
+        group.remove(existing);
+        disposeObject(existing);
+      }
+      return;
+    }
+    const shape = shapeFor(layer.fillPoints);
+    if (!shape) return;
+    const geometry = new ShapeGeometry(shape);
+    if (existing instanceof Mesh) {
+      existing.geometry.dispose();
+      existing.geometry = geometry;
+      const material = existing.material as MeshBasicMaterial;
+      material.opacity = 0;
+      material.transparent = true;
+      material.colorWrite = false;
+      material.needsUpdate = true;
+      existing.renderOrder = renderOrder;
+      applyLayerMetaToObject(existing, layer);
+      return;
+    }
+    if (existing) {
+      group.remove(existing);
+      disposeObject(existing);
+    }
+    const mesh = new Mesh(geometry, new MeshBasicMaterial({
+      color: '#ffffff',
+      depthTest: false,
+      depthWrite: false,
+      opacity: 0,
+      transparent: true,
+      colorWrite: false
+    }));
+    mesh.name = 'pick';
+    mesh.renderOrder = renderOrder;
+    applyLayerMetaToObject(mesh, layer);
+    group.add(mesh);
+  }
+
+  private ensureStrokeObject(group: Group, layer: GeometryLayer, renderOrder: number): void {
+    const existing = group.getObjectByName('stroke');
+    if (
+      !layer.stroke ||
+      layer.stroke === 'none' ||
+      layer.strokeOpacity <= 0 ||
+      layer.strokePoints.length < 2
+    ) {
+      if (existing) {
+        group.remove(existing);
+        disposeObject(existing);
+      }
+      return;
+    }
+    const geometry = new LineGeometry();
+    geometry.setPositions(linePositions(layer.strokePoints, layer.closed));
+    if (this.backend === 'gpu') {
+      const material = new Line2NodeMaterial({
+        color: layer.stroke,
+        dashed: false,
+        depthTest: false,
+        depthWrite: false,
+        opacity: layer.strokeOpacity,
+        transparent: layer.strokeOpacity < 1
+      });
+      (material as Line2WithWidth).linewidth = Math.max(1, layer.strokeWidth);
+      const nextLine = new WebGpuLine2(geometry, material);
+      nextLine.name = 'stroke';
+      nextLine.renderOrder = renderOrder;
+      applyLayerMetaToObject(nextLine, layer);
+      if (existing instanceof WebGpuLine2) {
+        group.remove(existing);
+        disposeObject(existing);
+      } else if (existing) {
+        group.remove(existing);
+        disposeObject(existing);
+      }
+      group.add(nextLine);
+      return;
+    }
+    const material = new LineMaterial({
+      color: layer.stroke,
+      dashed: false,
+      depthTest: false,
+      depthWrite: false,
+      opacity: layer.strokeOpacity,
+      transparent: layer.strokeOpacity < 1,
+      linewidth: Math.max(1, layer.strokeWidth),
+      resolution: new Vector2(
+        Math.max(1, this.viewportWidth),
+        Math.max(1, this.viewportHeight)
+      )
+    });
+    const nextLine = new WebGlLine2(geometry, material);
+    nextLine.name = 'stroke';
+    nextLine.renderOrder = renderOrder;
+    applyLayerMetaToObject(nextLine, layer);
+    if (existing instanceof WebGlLine2) {
+      group.remove(existing);
+      disposeObject(existing);
+    } else if (existing) {
+      group.remove(existing);
+      disposeObject(existing);
+    }
+    group.add(nextLine);
+  }
+
+  private updateGeometryLayer(layer: GeometryLayer, index: number): void {
+    const renderOrder = (index * 2) + 1;
+    let group = this.geometryObjects.get(layer.key);
+    if (!group) {
+      group = new Group();
+      group.name = layer.key;
+      this.geometryObjects.set(layer.key, group);
+      this.geometryRoot.add(group);
+    } else if (group.parent !== this.geometryRoot) {
+      this.geometryRoot.add(group);
+    }
+    group.renderOrder = renderOrder;
+    applyLayerMetaToObject(group, layer);
+    this.ensurePickMesh(group, layer, renderOrder);
+    this.ensureFillMesh(group, layer, renderOrder);
+    this.ensureStrokeObject(group, layer, renderOrder + 1);
+    this.syncObjectBindings(layer, group);
+  }
+
+  private updateTexturedLayer(layer: TexturedLayer, index: number): void {
+    const texture = this.ensureTexture(layer.textureRequest);
+    let sprite = this.texturedObjects.get(layer.key);
+    if (!texture) {
+      if (sprite) {
+        sprite.visible = false;
+      }
+      return;
+    }
+    if (!sprite) {
+      sprite = new Sprite(new SpriteMaterial({
+        map: texture,
+        color: '#ffffff',
+        depthTest: false,
+        depthWrite: false,
+        opacity: layer.opacity,
+        rotation: layer.rotation,
+        transparent: true
+      }));
+      sprite.name = layer.key;
+      this.texturedObjects.set(layer.key, sprite);
+      this.texturedRoot.add(sprite);
+    } else if (sprite.parent !== this.texturedRoot) {
+      this.texturedRoot.add(sprite);
+    }
+    const material = sprite.material as SpriteMaterial;
+    material.map = texture;
+    material.opacity = layer.opacity;
+    material.rotation = layer.rotation;
+    material.transparent = true;
+    material.needsUpdate = true;
+    sprite.visible = true;
+    sprite.position.set(layer.x, toSceneY(layer.y), 0);
+    sprite.scale.set(layer.width, layer.height, 1);
+    sprite.renderOrder = 10_000 + index;
+    applyLayerMetaToObject(sprite, layer);
+    this.syncObjectBindings(layer, sprite);
+  }
+
+  getPrimaryObjectForMobject(mobjectId: string): Object3D | null {
+    return this.objectByMobjectId.get(mobjectId) ?? null;
+  }
+
+  hitTest(clientX: number, clientY: number): LayerMetaObject | null {
+    if (!this.renderer) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -(((clientY - rect.top) / rect.height) * 2 - 1);
+    this.raycaster.setFromCamera(new Vector2(x, y), this.camera);
+    const hits = this.raycaster.intersectObjects(
+      [...this.geometryRoot.children, ...this.texturedRoot.children],
+      true
+    ).filter((hit) => hit.object.userData?.pickable);
+    if (hits.length === 0) return null;
+    hits.sort(
+      (left, right) => (right.object.renderOrder ?? 0) - (left.object.renderOrder ?? 0)
+    );
+    return hits[0]!.object as LayerMetaObject;
+  }
+
   render(snapshot: WebGpuSnapshot): void {
     if (!this.renderer || !this.backend) return;
     this.latestSnapshot = snapshot;
-    for (const child of [...this.geometryRoot.children]) {
-      this.geometryRoot.remove(child);
-      disposeObject(child);
-    }
-    for (const child of [...this.texturedRoot.children]) {
-      this.texturedRoot.remove(child);
-      disposeObject(child);
-    }
     const sortedGeometry = [...snapshot.geometryLayers].sort((left, right) =>
       left.zIndex === right.zIndex
         ? left.order - right.order
         : left.zIndex - right.zIndex
     );
+    const nextGeometryKeys = new Set(sortedGeometry.map((layer) => layer.key));
+    for (const key of [...this.geometryObjects.keys()]) {
+      if (!nextGeometryKeys.has(key)) {
+        this.removeGeometryLayer(key);
+      }
+    }
     for (const [index, layer] of sortedGeometry.entries()) {
-      const renderOrder = (index * 2) + 1;
-      if (
-        layer.fill &&
-        layer.fill !== 'none' &&
-        layer.fillOpacity > 0 &&
-        layer.fillPoints.length >= 3 &&
-        layer.closed
-      ) {
-        const shape = shapeFor(layer.fillPoints);
-        if (shape) {
-          const geometry = new ShapeGeometry(shape);
-          const material = new MeshBasicMaterial({
-            color: layer.fill,
-            depthTest: false,
-            depthWrite: false,
-            opacity: layer.fillOpacity,
-            side: DoubleSide,
-            transparent: layer.fillOpacity < 1
-          });
-          const mesh = new Mesh(geometry, material);
-          mesh.renderOrder = renderOrder;
-          this.geometryRoot.add(mesh);
-        }
-      }
-      if (
-        layer.stroke &&
-        layer.stroke !== 'none' &&
-        layer.strokeOpacity > 0 &&
-        layer.strokePoints.length >= 2
-      ) {
-        const geometry = new LineGeometry();
-        geometry.setPositions(linePositions(layer.strokePoints, layer.closed));
-        if (this.backend === 'gpu') {
-          const material = new Line2NodeMaterial({
-            color: layer.stroke,
-            dashed: false,
-            depthTest: false,
-            depthWrite: false,
-            opacity: layer.strokeOpacity,
-            transparent: layer.strokeOpacity < 1
-          });
-          (material as Line2WithWidth).linewidth = Math.max(
-            1,
-            layer.strokeWidth
-          );
-          const line = new WebGpuLine2(geometry, material);
-          line.renderOrder = renderOrder + 1;
-          this.geometryRoot.add(line);
-        } else {
-          const material = new LineMaterial({
-            color: layer.stroke,
-            dashed: false,
-            depthTest: false,
-            depthWrite: false,
-            opacity: layer.strokeOpacity,
-            transparent: layer.strokeOpacity < 1,
-            linewidth: Math.max(1, layer.strokeWidth),
-            resolution: new Vector2(
-              Math.max(1, this.viewportWidth),
-              Math.max(1, this.viewportHeight)
-            )
-          });
-          const line = new WebGlLine2(geometry, material);
-          line.renderOrder = renderOrder + 1;
-          this.geometryRoot.add(line);
-        }
-      }
+      this.updateGeometryLayer(layer, index);
     }
 
     const sortedTextures = [...snapshot.texturedLayers].sort((left, right) =>
@@ -1039,36 +1341,27 @@ export class WebGPUManimRenderer {
         ? left.order - right.order
         : left.zIndex - right.zIndex
     );
-    for (const [index, layer] of sortedTextures.entries()) {
-      const texture = this.ensureTexture(layer.textureRequest);
-      if (!texture) continue;
-      const material = new SpriteMaterial({
-        map: texture,
-        color: '#ffffff',
-        depthTest: false,
-        depthWrite: false,
-        opacity: layer.opacity,
-        rotation: layer.rotation,
-        transparent: layer.opacity < 1 || true
-      });
-      const sprite = new Sprite(material);
-      sprite.position.set(layer.x, toSceneY(layer.y), 0);
-      sprite.scale.set(layer.width, layer.height, 1);
-      sprite.renderOrder = 10_000 + index;
-      this.texturedRoot.add(sprite);
+    const nextTextureKeys = new Set(sortedTextures.map((layer) => layer.key));
+    for (const key of [...this.texturedObjects.keys()]) {
+      if (!nextTextureKeys.has(key)) {
+        this.removeTexturedLayer(key);
+      }
     }
+    for (const [index, layer] of sortedTextures.entries()) {
+      this.updateTexturedLayer(layer, index);
+    }
+    this.pruneMobjectBindings(snapshot);
     this.renderer.render(this.scene, this.camera);
   }
 
   dispose(): void {
-    for (const child of [...this.geometryRoot.children]) {
-      this.geometryRoot.remove(child);
-      disposeObject(child);
+    for (const key of [...this.geometryObjects.keys()]) {
+      this.removeGeometryLayer(key);
     }
-    for (const child of [...this.texturedRoot.children]) {
-      this.texturedRoot.remove(child);
-      disposeObject(child);
+    for (const key of [...this.texturedObjects.keys()]) {
+      this.removeTexturedLayer(key);
     }
+    this.objectByMobjectId.clear();
     for (const entry of this.textureCache.values()) {
       entry.texture?.dispose();
     }

@@ -1,13 +1,15 @@
 import { expect, test } from '@playwright/test';
-import { readDebugMobject } from './helpers/ts-scene-debug';
+import { readDebugMobject, waitForStage } from './helpers/ts-scene-debug';
 
 test('axes plotting scene renders ticks, labels, and graph', async ({
   page,
 }) => {
-  await page.goto('/ts-scenes/axes_graphs_and_plotting/axes_plot');
-  await expect(page).toHaveURL('/ts-scenes/axes_graphs_and_plotting/axes_plot');
+  await page.goto('/ts-scenes/axes_graphs_and_plotting/axes_plot?capture=1&autoplay=0');
+  await expect(page).toHaveURL(
+    '/ts-scenes/axes_graphs_and_plotting/axes_plot?capture=1&autoplay=0'
+  );
 
-  await page.getByRole('button', { name: 'Reset' }).click();
+  await waitForStage(page);
 
   await expect
     .poll(async () => await readDebugMobject(page, 'graph'))

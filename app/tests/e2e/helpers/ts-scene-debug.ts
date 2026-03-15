@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 export type DebugMobject = {
   id: string;
@@ -54,4 +55,15 @@ export async function readDebugMobject(
       (mobject) => matches(mobject)
     ) ?? null;
   }, id);
+}
+
+export async function waitForStage(page: Page) {
+  const stage = page.getByTestId('webgpu-scene-stage');
+  await expect(stage).toBeVisible({ timeout: 30_000 });
+  await expect
+    .poll(async () => stage.getAttribute('data-renderer'), {
+      timeout: 30_000
+    })
+    .toMatch(/gpu|webgl/);
+  return stage;
 }

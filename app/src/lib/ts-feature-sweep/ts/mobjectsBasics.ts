@@ -21,11 +21,33 @@ export function buildMobjectsBasicsScene(): Scene {
     size: 112,
     stroke: '#4CC9F0'
   });
+  square.interactive = true;
+  square.cursor = 'pointer';
+  square.userData = { role: 'square' };
+  square.onPointerEnter = ({ mobject }) => {
+    mobject.cursor = 'help';
+    mobject.setFill?.('#4CC9F0', 0.18);
+  };
+  square.onPointerLeave = ({ mobject }) => {
+    mobject.cursor = 'pointer';
+    mobject.setFill?.('none', 0);
+  };
   square.shift!(LEFT);
   const circle = Circle('circle', {
     radius: 56,
     stroke: '#F72585'
   });
+  circle.interactive = true;
+  circle.cursor = 'crosshair';
+  circle.userData = { role: 'circle' };
+  circle.onPointerDown = ({ mobject }) => {
+    mobject.cursor = 'grabbing';
+    mobject.setFill?.('#F72585', 0.22);
+  };
+  circle.onPointerUp = ({ mobject }) => {
+    mobject.cursor = 'crosshair';
+    mobject.setFill?.('none', 0);
+  };
   const row = VGroup('row', square, circle).arrange!(RIGHT, 1.2);
 
   title.moveTo!([0, 1.75, 0]);

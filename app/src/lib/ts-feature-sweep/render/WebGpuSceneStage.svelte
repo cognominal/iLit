@@ -2,7 +2,9 @@
   import {
     STAGE_HEIGHT,
     STAGE_WIDTH,
-    type Mobject
+    type ManimPointerEvent,
+    type Mobject,
+    type Point
   } from '$lib/manim';
   import {
     type ThreeRendererBackend,
@@ -43,35 +45,52 @@
   let ready = $state(false);
   let failed = $state(false);
   let rendererBackend = $state<ThreeRendererBackend | null>(null);
+  let interactionVersion = $state(0);
+  let hoveredMobjectId = $state<string | null>(null);
+  let activeMobjectId = $state<string | null>(null);
+  let activePointerId = $state<number | null>(null);
+  let stageCursor = $state('default');
+  const boundObjects = new Map<string, Object | null>();
+  const boundMobjects = new Map<string, Mobject>();
 
   const orderedOverlayMobjects = $derived(
-    [...mobjects]
-      .sort((left, right) => (left.zIndex ?? 0) - (right.zIndex ?? 0))
-      .filter((mobject) => {
-        if (
-          isWebGpuGeometryMobject(mobject) ||
-          isWebGpuTexturedMobject(mobject)
-        ) {
-          return false;
-        }
-        const replacedActive = replacements.some((replacement) =>
-          replacement.sourceId === mobject.id ||
-          replacement.targetId === mobject.id
-        );
-        const replacedSourceDone = completedReplacementSources.has(mobject.id);
-        return !(replacedActive || replacedSourceDone);
-      })
+    (() => {
+      interactionVersion;
+      return [...mobjects]
+        .sort((left, right) => (left.zIndex ?? 0) - (right.zIndex ?? 0))
+        .filter((mobject) => {
+          if (
+            isWebGpuGeometryMobject(mobject) ||
+            isWebGpuTexturedMobject(mobject)
+          ) {
+            return false;
+          }
+          const replacedActive = replacements.some((replacement) =>
+            replacement.sourceId === mobject.id ||
+            replacement.targetId === mobject.id
+          );
+          const replacedSourceDone = completedReplacementSources.has(mobject.id);
+          return !(replacedActive || replacedSourceDone);
+        });
+    })()
   );
 
   const renderSnapshot = $derived(
-    buildWebGpuSnapshot({
-      bare,
-      mobjects,
-      progressById,
-      replacements,
-      completedReplacementSources,
-      completedReplacementTargets
-    })
+    (() => {
+      interactionVersion;
+      return buildWebGpuSnapshot({
+        bare,
+        mobjects,
+        progressById,
+        replacements,
+        completedReplacementSources,
+        completedReplacementTargets
+      });
+    })()
+  );
+
+  const mobjectsById = $derived(
+    new Map(mobjects.map((mobject) => [mobject.id, mobject]))
   );
 
   function posX(mobject: Mobject): number | undefined {
@@ -125,6 +144,195 @@
     );
   }
 
+  function scenePointFromEvent(event: PointerEvent): Point | null {
+    if (!stageEl) return null;
+    const rect = stageEl.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * STAGE_WIDTH,
+      y: ((event.clientY - rect.top) / rect.height) * STAGE_HEIGHT
+    };
+  }
+
+  function updateStageCursor(nextCursor?: string, pickable = false): void {
+    stageCursor = nextCursor ?? (pickable ? 'pointer' : 'default');
+  }
+
+  function syncRenderObjectBindings(): void {
+    if (!webGpuRenderer) return;
+    const currentIds = new Set<string>();
+    for (const mobject of mobjects) {
+      if (!mobject.bindRenderObject) continue;
+      currentIds.add(mobject.id);
+      const object = webGpuRenderer.getPrimaryObjectForMobject(mobject.id);
+      const previousObject = boundObjects.get(mobject.id) ?? null;
+      const previousMobject = boundMobjects.get(mobject.id);
+      if (previousObject !== object || previousMobject !== mobject) {
+        mobject.bindRenderObject(object);
+        boundObjects.set(mobject.id, object);
+        boundMobjects.set(mobject.id, mobject);
+      }
+    }
+    for (const id of [...boundObjects.keys()]) {
+      if (currentIds.has(id)) continue;
+      boundMobjects.get(id)?.bindRenderObject?.(null);
+      boundObjects.delete(id);
+      boundMobjects.delete(id);
+    }
+  }
+
+  function rerenderAfterInteraction(): void {
+    interactionVersion += 1;
+    if (!webGpuRenderer || !ready) return;
+    webGpuRenderer.render(buildWebGpuSnapshot({
+      bare,
+      mobjects,
+      progressById,
+      replacements,
+      completedReplacementSources,
+      completedReplacementTargets
+    }));
+    syncRenderObjectBindings();
+  }
+
+  function pointerEventFor(
+    mobject: Mobject,
+    nativeEvent: PointerEvent,
+    object?: Object | null
+  ): ManimPointerEvent | null {
+    const scenePoint = scenePointFromEvent(nativeEvent);
+    if (!scenePoint) return null;
+    return {
+      mobject,
+      mobjectId: mobject.id,
+      sourceRef: mobject.sourceRef,
+      scenePoint,
+      nativeEvent,
+      object3d: (object ?? webGpuRenderer?.getPrimaryObjectForMobject(mobject.id) ?? null) as never
+    };
+  }
+
+  function invokePointerCallback(
+    mobject: Mobject | null,
+    callback:
+      | 'onPointerDown'
+      | 'onPointerMove'
+      | 'onPointerUp'
+      | 'onPointerEnter'
+      | 'onPointerLeave',
+    nativeEvent: PointerEvent,
+    object?: Object | null
+  ): void {
+    if (!mobject) return;
+    if (!mobject[callback]) return;
+    const event = pointerEventFor(mobject, nativeEvent, object);
+    if (!event) return;
+    mobject[callback]?.(event);
+    rerenderAfterInteraction();
+  }
+
+  function resolvePointerTarget(event: PointerEvent): {
+    mobject: Mobject | null;
+    object: Object | null;
+    cursor?: string;
+    pickable: boolean;
+  } {
+    const object = webGpuRenderer?.hitTest(event.clientX, event.clientY) ?? null;
+    const mobjectId = object?.userData?.mobjectId;
+    return {
+      mobject: mobjectId ? (mobjectsById.get(mobjectId) ?? null) : null,
+      object,
+      cursor: object?.userData?.cursor,
+      pickable: Boolean(object?.userData?.pickable)
+    };
+  }
+
+  function setHoveredMobject(
+    nextMobject: Mobject | null,
+    nativeEvent: PointerEvent,
+    object?: Object | null,
+    cursor?: string,
+    pickable = false
+  ): void {
+    const current = hoveredMobjectId ? (mobjectsById.get(hoveredMobjectId) ?? null) : null;
+    if (current?.id === nextMobject?.id) {
+      updateStageCursor(
+        nextMobject?.cursor ?? cursor,
+        pickable || Boolean(nextMobject)
+      );
+      return;
+    }
+    if (current) {
+      invokePointerCallback(current, 'onPointerLeave', nativeEvent);
+    }
+    hoveredMobjectId = nextMobject?.id ?? null;
+    if (nextMobject) {
+      invokePointerCallback(nextMobject, 'onPointerEnter', nativeEvent, object);
+    }
+    updateStageCursor(nextMobject?.cursor ?? cursor, pickable || Boolean(nextMobject));
+  }
+
+  function handlePointerMove(event: PointerEvent): void {
+    const target = resolvePointerTarget(event);
+    setHoveredMobject(
+      target.mobject,
+      event,
+      target.object,
+      target.cursor,
+      target.pickable
+    );
+    const active = activeMobjectId ? (mobjectsById.get(activeMobjectId) ?? null) : null;
+    invokePointerCallback(active ?? target.mobject, 'onPointerMove', event, target.object);
+  }
+
+  function handlePointerDown(event: PointerEvent): void {
+    const target = resolvePointerTarget(event);
+    setHoveredMobject(
+      target.mobject,
+      event,
+      target.object,
+      target.cursor,
+      target.pickable
+    );
+    activePointerId = event.pointerId;
+    activeMobjectId = target.mobject?.id ?? null;
+    if (activeMobjectId && stageEl?.setPointerCapture) {
+      stageEl.setPointerCapture(event.pointerId);
+    }
+    invokePointerCallback(target.mobject, 'onPointerDown', event, target.object);
+    updateStageCursor(
+      target.mobject?.cursor ?? target.cursor,
+      target.pickable || Boolean(target.mobject)
+    );
+  }
+
+  function handlePointerUp(event: PointerEvent): void {
+    const active = activeMobjectId ? (mobjectsById.get(activeMobjectId) ?? null) : null;
+    const target = resolvePointerTarget(event);
+    invokePointerCallback(active ?? target.mobject, 'onPointerUp', event, target.object);
+    if (activePointerId !== null && stageEl?.releasePointerCapture) {
+      try {
+        stageEl.releasePointerCapture(activePointerId);
+      } catch {}
+    }
+    activePointerId = null;
+    activeMobjectId = null;
+    setHoveredMobject(
+      target.mobject,
+      event,
+      target.object,
+      target.cursor,
+      target.pickable
+    );
+  }
+
+  function handlePointerLeave(event: PointerEvent): void {
+    setHoveredMobject(null, event, null, undefined, false);
+    if (!activeMobjectId) {
+      updateStageCursor(undefined, false);
+    }
+  }
+
   $effect(() => {
     if (!canvasEl || webGpuRenderer || failed) return;
     let cancelled = false;
@@ -141,6 +349,7 @@
         failed = false;
         resizeRenderer();
         next.render(renderSnapshot);
+        syncRenderObjectBindings();
       })
       .catch(() => {
         if (cancelled) return;
@@ -166,9 +375,15 @@
     if (!webGpuRenderer || !ready) return;
     webGpuRenderer.setBackground(bare ? '#000000' : '#020617');
     webGpuRenderer.render(renderSnapshot);
+    syncRenderObjectBindings();
   });
 
   onDestroy(() => {
+    for (const mobject of boundMobjects.values()) {
+      mobject.bindRenderObject?.(null);
+    }
+    boundObjects.clear();
+    boundMobjects.clear();
     webGpuRenderer?.dispose();
     webGpuRenderer = null;
     rendererBackend = null;
@@ -179,12 +394,18 @@
   bind:this={stageEl}
   data-testid="webgpu-scene-stage"
   data-renderer={ready ? rendererBackend : failed ? 'error' : 'initializing'}
+  data-hover-mobject-id={hoveredMobjectId ?? undefined}
+  data-active-mobject-id={activeMobjectId ?? undefined}
   role={ready ? 'img' : undefined}
   aria-label={ready ? 'TS scene stage' : undefined}
   class={`relative w-full overflow-hidden ${bare
     ? 'bg-black'
     : 'rounded-xl border border-slate-800 bg-slate-950'}`}
-  style={`aspect-ratio:${STAGE_WIDTH}/${STAGE_HEIGHT};`}
+  style={`aspect-ratio:${STAGE_WIDTH}/${STAGE_HEIGHT};cursor:${stageCursor};`}
+  onpointermove={handlePointerMove}
+  onpointerdown={handlePointerDown}
+  onpointerup={handlePointerUp}
+  onpointerleave={handlePointerLeave}
 >
   <canvas
     bind:this={canvasEl}

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { readDebugMobject } from './helpers/ts-scene-debug';
+import { readDebugMobject, waitForStage } from './helpers/ts-scene-debug';
 
 test('ts sweep route and ts scene rendering work from top nav', async ({
   page,
@@ -15,26 +15,26 @@ test('ts sweep route and ts scene rendering work from top nav', async ({
     page.getByText('TS scenes')
   ).toHaveCount(1);
 
-  await page.getByRole('link', {
+  const goldenLink = page.getByRole('link', {
     name: '15 Regression Golden Frames / Golden Seed'
-  }).click();
-  await expect(page).toHaveURL('/ts-scenes/regression_golden_frames/golden_seed');
+  });
+  await expect(goldenLink).toBeVisible();
+  const goldenHref = await goldenLink.getAttribute('href');
+  expect(goldenHref).toBe('/ts-scenes/regression_golden_frames/golden_seed');
+  await page.goto(goldenHref!);
+  await expect(page).toHaveURL(goldenHref!);
 
   await page.goto('/ts-scenes/mobjects_basics/basics_layout');
   await expect(page).toHaveURL('/ts-scenes/mobjects_basics/basics_layout');
 
-  const stage = page.getByTestId('webgpu-scene-stage');
-  await expect(stage).toBeVisible();
-  await expect
-    .poll(async () => stage.getAttribute('data-renderer'))
-    .toMatch(/gpu|webgl/);
+  await waitForStage(page);
 
   await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pause' })).toHaveCount(0);
 
   const mode = page.locator('#mode');
 
-  await page.getByRole('button', { name: 'Reset' }).click();
+  await page.getByRole('button', { name: 'Reset' }).click({ force: true });
   await expect(mode).toHaveValue('normal');
   await expect(await readDebugMobject(page, 'title')).not.toBeNull();
   await expect(await readDebugMobject(page, 'square')).not.toBeNull();

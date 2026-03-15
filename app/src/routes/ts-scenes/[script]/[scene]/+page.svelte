@@ -388,7 +388,7 @@
   });
 
   $effect(() => {
-    if (!browser || captureMode) return;
+    if (!browser) return;
     const debugWindow = window as Window & {
       __tsSceneDebug?: SceneDebugSnapshot;
     };

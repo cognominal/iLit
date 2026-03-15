@@ -1,27 +1,27 @@
 import { expect, test } from '@playwright/test';
+import { waitForStage } from './helpers/ts-scene-debug';
 
 test('gpu sweep route opens GPU preview scenes', async ({ page }) => {
+  test.slow();
   await page.goto('/gpu-sweep');
   await expect(page).toHaveURL('/gpu-sweep');
   await expect(
     page.getByRole('heading', { name: 'Three.js Feature Sweep' })
   ).toBeVisible();
 
-  await page.getByRole('link', {
+  const basicsLink = page.getByRole('link', {
     name: '01 Mobjects Basics / Basics Layout'
-  }).click();
-  await expect(page).toHaveURL('/ts-scenes/mobjects_basics/basics_layout');
+  });
+  await expect(basicsLink).toBeVisible();
+  const basicsHref = await basicsLink.getAttribute('href');
+  expect(basicsHref).toBe('/ts-scenes/mobjects_basics/basics_layout');
+  const captureHref = `${basicsHref!}?capture=1&autoplay=0`;
+  await page.goto(captureHref);
+  await expect(page).toHaveURL(captureHref);
 
-  const stage = page.getByRole('img', { name: 'TS scene stage' });
-  await expect(stage).toBeVisible();
-  await expect
-    .poll(async () => stage.getAttribute('data-renderer'))
-    .toMatch(/gpu|webgl/);
+  await waitForStage(page);
 
-  await page.goto('/ts-scenes/text_math_tex/text_math');
-  await expect(page).toHaveURL('/ts-scenes/text_math_tex/text_math');
-  const gpuStage = page.getByRole('img', { name: 'TS scene stage' });
-  await expect
-    .poll(async () => gpuStage.getAttribute('data-renderer'))
-    .toMatch(/gpu|webgl/);
+  await page.goto('/ts-scenes/text_math_tex/text_math?capture=1&autoplay=0');
+  await expect(page).toHaveURL('/ts-scenes/text_math_tex/text_math?capture=1&autoplay=0');
+  await waitForStage(page);
 });

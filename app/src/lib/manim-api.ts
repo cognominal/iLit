@@ -1,3 +1,5 @@
+import type { Object3D } from 'three';
+
 export type MobjectKind =
   'square' | 'circle' | 'text' | 'path' | 'dot' |
   'mathtex' | 'kmathtex' | 'group' | 'svg' |
@@ -23,11 +25,24 @@ export type MobjectSourceRef = {
   label?: string;
 };
 
+export type ManimPointerEvent = {
+  mobject: Mobject;
+  mobjectId: string;
+  sourceRef?: MobjectSourceRef;
+  scenePoint: Point;
+  nativeEvent: PointerEvent;
+  object3d?: Object3D;
+};
+
 export type Mobject = {
   [index: number]: Mobject | undefined;
   id: string;
   kind: MobjectKind;
   sourceRef?: MobjectSourceRef;
+  interactive?: boolean;
+  draggable?: boolean;
+  cursor?: string;
+  userData?: Record<string, unknown>;
   stroke: string;
   strokeWidth: number;
   opacity?: number;
@@ -73,6 +88,12 @@ export type Mobject = {
   savedState?: Partial<Mobject>;
   target?: Mobject;
   animate?: AnimateBuilder;
+  onPointerDown?: (event: ManimPointerEvent) => void;
+  onPointerMove?: (event: ManimPointerEvent) => void;
+  onPointerUp?: (event: ManimPointerEvent) => void;
+  onPointerEnter?: (event: ManimPointerEvent) => void;
+  onPointerLeave?: (event: ManimPointerEvent) => void;
+  bindRenderObject?: (object: Object3D | null) => void;
   become?: (target: Mobject) => Mobject;
   moveTo?: (target: PointLike | Mobject) => Mobject;
   move_to?: (target: PointLike | Mobject) => Mobject;

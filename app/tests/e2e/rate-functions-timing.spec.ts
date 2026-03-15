@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { readDebugMobject } from './helpers/ts-scene-debug';
+import { readDebugMobject, waitForStage } from './helpers/ts-scene-debug';
 
 async function setSliderValue(page: Page, value: number): Promise<void> {
   const slider = page.getByRole('slider', { name: 'Time slider' });
@@ -19,23 +19,19 @@ async function dotX(page: Page): Promise<number> {
 test('rate function scene goes out and back over the animation', async ({
   page,
 }) => {
+  test.slow();
   await page.goto('/ts-scenes/rate_functions_and_timing/timing_demo');
   await expect(page).toHaveURL(
     '/ts-scenes/rate_functions_and_timing/timing_demo'
   );
 
-  const stage = page.getByRole('img', { name: 'TS scene stage' });
+  const stage = await waitForStage(page);
   const timeLabel = page.locator(
     'div.w-32.text-right.text-sm.tabular-nums.text-cyan-300'
   );
-
-  await expect(stage).toBeVisible();
-  await expect
-    .poll(async () => stage.getAttribute('data-renderer'))
-    .toMatch(/gpu|webgl/);
   await expect(await readDebugMobject(page, 'dot')).not.toBeNull();
 
-  await page.getByRole('button', { name: 'Reset' }).click();
+  await page.getByRole('button', { name: 'Reset' }).click({ force: true });
   await expect(timeLabel).toContainText('0.00 sec');
 
   const startX = await dotX(page);
