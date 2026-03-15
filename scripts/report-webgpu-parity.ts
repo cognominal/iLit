@@ -266,8 +266,8 @@ function buildMarkdown(results: PairResult[]): string {
     '## Scope',
     '',
     'This report compares committed Python `medres.mp4` artifacts against',
-    'fresh TS captures recorded from the `?renderer=gpu` scene route in',
-    'headed Google Chrome.',
+    'fresh TS captures recorded from the default Three.js-backed scene',
+    'route in headed Google Chrome.',
     '',
     'Date of comparison: `2026-03-14`',
     '',
@@ -275,7 +275,7 @@ function buildMarkdown(results: PairResult[]): string {
     '',
     '- Python source of truth: committed `media/py-mp4/**/medres.mp4`.',
     '- TS source of truth: fresh route capture from',
-    '  `/ts-scenes/<script>/<scene>?renderer=gpu&capture=1&autoplay=0`.',
+    '  `/ts-scenes/<script>/<scene>?capture=1&autoplay=0`.',
     '- Browser for TS capture: headed Google Chrome via Playwright.',
     '- Each TS capture was trimmed to the Python scene duration target.',
     '- Similarity metric: SSIM on a normalized `12 fps`, `640x360`',
@@ -307,10 +307,10 @@ function buildMarkdown(results: PairResult[]): string {
     '',
     '## Notes',
     '',
-    '- This report is specifically for the WebGPU route, not the legacy',
-    '  SVG-backed TS sweep artifacts.',
-    '- Headless Playwright falls back to SVG in this repo, so headed',
-    '  Chrome was required for a real WebGPU comparison.'
+    '- This report is specifically for the default Three.js-backed TS',
+    '  scene route.',
+    '- Headed Chrome was required here because the report checks true',
+    '  WebGPU parity rather than the WebGL fallback path.'
   );
 
   return lines.join('\n');
@@ -333,7 +333,7 @@ async function captureGpuTsMp4(
   const recordingStartMs = Date.now();
   const targetUrl =
     `http://127.0.0.1:${DEV_PORT}/ts-scenes/${scriptId}/${sceneId}` +
-    '?renderer=gpu&capture=1&autoplay=0';
+    '?capture=1&autoplay=0';
 
   await page.goto(targetUrl, {
     waitUntil: 'networkidle',

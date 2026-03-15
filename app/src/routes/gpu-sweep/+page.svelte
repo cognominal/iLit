@@ -4,19 +4,19 @@
   const routes = tsScripts.flatMap((script) =>
     script.scenes.map((scene) => ({
       label: `${script.title} / ${scene.title}`,
-      href: `/ts-scenes/${script.id}/${scene.id}?renderer=gpu`,
+      href: `/ts-scenes/${script.id}/${scene.id}`,
       description: scene.description
     }))
   );
 </script>
 
 <section class="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-6">
-  <h1 class="text-2xl font-semibold text-slate-100">GPU Feature Sweep</h1>
+  <h1 class="text-2xl font-semibold text-slate-100">
+    Three.js Feature Sweep
+  </h1>
   <p class="max-w-2xl text-slate-300">
-    These routes reuse the TS scene builders, then render geometry through
-    a three.js WebGPU stage. Text, MathTex, and SVG assets stay on an SVG
-    overlay, and the view falls back to the SVG stage if WebGPU is not
-    available.
+    This is the legacy alias route for the Three.js-backed TS scene
+    preview. It now points at the same scene URLs as the main TS sweep.
   </p>
   <ul class="space-y-2">
     {#each routes as route}

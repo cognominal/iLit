@@ -14,11 +14,7 @@
   <h1 class="text-2xl font-semibold text-slate-100">TS-Based Feature Sweep</h1>
   <p class="max-w-2xl text-slate-300">
     These routes are driven from TypeScript scene modules, not per-scene
-    Svelte files.
-  </p>
-  <p class="max-w-2xl text-slate-300">
-    For the WebGPU-backed preview path, use
-    <a class="text-cyan-300 underline" href="/gpu-sweep">GPU sweep</a>.
+    Svelte files, and now use the Three.js-backed renderer by default.
   </p>
   <ul class="space-y-2">
     {#each routes as route}

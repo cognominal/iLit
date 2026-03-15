@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { readDebugMobject } from './helpers/ts-scene-debug';
 
 test('axes plotting scene renders ticks, labels, and graph', async ({
   page,
@@ -8,14 +9,17 @@ test('axes plotting scene renders ticks, labels, and graph', async ({
 
   const stage = page.getByRole('img', { name: 'TS scene stage' });
   await expect(stage).toBeVisible();
+  await expect
+    .poll(async () => stage.getAttribute('data-renderer'))
+    .toMatch(/gpu|webgl/);
 
   await page.getByRole('button', { name: 'Reset' }).click();
 
-  await expect(stage.locator('#axes_x')).toHaveCount(1);
-  await expect(stage.locator('#axes_y')).toHaveCount(1);
-  await expect(stage.locator('#axes_x_tick_-4')).toHaveCount(1);
-  await expect(stage.locator('#axes_x_label_-4')).toHaveCount(1);
-  await expect(stage.locator('#axes_y_tick_6')).toHaveCount(1);
-  await expect(stage.locator('#axes_y_label_6')).toHaveCount(1);
-  await expect(stage.locator('#graph')).toHaveCount(1);
+  await expect(await readDebugMobject(page, 'axes_x')).not.toBeNull();
+  await expect(await readDebugMobject(page, 'axes_y')).not.toBeNull();
+  await expect(await readDebugMobject(page, 'axes_x_tick_-4')).not.toBeNull();
+  await expect(await readDebugMobject(page, 'axes_x_label_-4')).not.toBeNull();
+  await expect(await readDebugMobject(page, 'axes_y_tick_6')).not.toBeNull();
+  await expect(await readDebugMobject(page, 'axes_y_label_6')).not.toBeNull();
+  await expect(await readDebugMobject(page, 'graph')).not.toBeNull();
 });

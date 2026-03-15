@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { readDebugMobject } from './helpers/ts-scene-debug';
 
 test('mobjects basics starts paused with first frame visible', async ({
   page,
@@ -14,14 +15,15 @@ test('mobjects basics starts paused with first frame visible', async ({
   await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pause' })).toHaveCount(0);
 
-  const stage = page.getByRole('img', { name: 'TS scene stage' });
-  const title = stage.locator('#title');
-  const square = stage.locator('#square');
-  const circle = stage.locator('#circle');
+  const stage = page.getByTestId('webgpu-scene-stage');
+  await expect(stage).toBeVisible();
+  await expect
+    .poll(async () => stage.getAttribute('data-renderer'))
+    .toMatch(/gpu|webgl/);
 
-  await expect(title).toHaveCount(1);
-  await expect(square).toHaveCount(1);
-  await expect(circle).toHaveCount(1);
+  await expect(await readDebugMobject(page, 'title')).not.toBeNull();
+  await expect(await readDebugMobject(page, 'square')).not.toBeNull();
+  await expect(await readDebugMobject(page, 'circle')).not.toBeNull();
 
   const timeLabel = page.locator('div.w-32.text-right.text-sm.tabular-nums.text-cyan-300');
   await expect(timeLabel).toContainText('0.00 sec');

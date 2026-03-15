@@ -13,13 +13,17 @@ import {
   Sprite,
   SpriteMaterial,
   SRGBColorSpace,
+  Vector2,
+  WebGLRenderer,
   type Material,
   type Object3D,
   type Texture
 } from 'three';
 import { WebGPURenderer, Line2NodeMaterial } from 'three/webgpu';
-import { Line2 } from 'three/addons/lines/webgpu/Line2.js';
+import { Line2 as WebGlLine2 } from 'three/addons/lines/Line2.js';
+import { Line2 as WebGpuLine2 } from 'three/addons/lines/webgpu/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import {
   STAGE_HEIGHT,
   STAGE_WIDTH,
@@ -81,6 +85,8 @@ export type WebGpuSnapshot = {
   texturedLayers: TexturedLayer[];
 };
 
+export type ThreeRendererBackend = 'gpu' | 'webgl';
+
 type TextureEntry = {
   state: 'pending' | 'ready' | 'error';
   texture?: Texture;
@@ -88,6 +94,7 @@ type TextureEntry = {
 };
 
 type Line2WithWidth = Line2NodeMaterial & { linewidth: number };
+type ThreeRenderer = WebGPURenderer | WebGLRenderer;
 
 function lerpNumber(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -816,7 +823,8 @@ function shapeFor(points: Point[]): Shape | null {
 
 export class WebGPUManimRenderer {
   private canvas: HTMLCanvasElement;
-  private renderer: WebGPURenderer | null = null;
+  private renderer: ThreeRenderer | null = null;
+  private backend: ThreeRendererBackend | null = null;
   private scene = new ThreeScene();
   private camera = new OrthographicCamera(
     0,
@@ -831,6 +839,8 @@ export class WebGPUManimRenderer {
   private textureCache = new Map<string, TextureEntry>();
   private latestSnapshot: WebGpuSnapshot | null = null;
   private rerenderQueued = false;
+  private viewportWidth = STAGE_WIDTH;
+  private viewportHeight = STAGE_HEIGHT;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -839,15 +849,36 @@ export class WebGPUManimRenderer {
     this.scene.add(this.texturedRoot);
   }
 
-  async init(background = '#020617'): Promise<void> {
-    this.renderer = new WebGPURenderer({
-      alpha: true,
-      antialias: true,
-      canvas: this.canvas
-    });
-    await this.renderer.init();
+  async init(background = '#020617'): Promise<ThreeRendererBackend> {
+    // Phase 0 converges on a single Three.js renderer path. WebGL is the
+    // stable backend right now; the WebGPU path can return once it paints
+    // correctly across the preview and test environments.
+    const preferWebGl = true;
+    if (!preferWebGl) {
+      try {
+        const renderer = new WebGPURenderer({
+          alpha: true,
+          antialias: true,
+          canvas: this.canvas
+        });
+        await renderer.init();
+        this.renderer = renderer;
+        this.backend = 'gpu';
+      } catch {}
+    }
+    if (!this.renderer || !this.backend) {
+      const renderer = new WebGLRenderer({
+        alpha: true,
+        antialias: true,
+        canvas: this.canvas
+      });
+      renderer.outputColorSpace = SRGBColorSpace;
+      this.renderer = renderer;
+      this.backend = 'webgl';
+    }
     this.scene.background = new Color(background);
     this.renderer.setPixelRatio(window.devicePixelRatio || 1);
+    return this.backend;
   }
 
   setBackground(color: string): void {
@@ -856,8 +887,14 @@ export class WebGPUManimRenderer {
 
   setSize(width: number, height: number, pixelRatio = 1): void {
     if (!this.renderer) return;
+    this.viewportWidth = width;
+    this.viewportHeight = height;
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
+  }
+
+  getBackend(): ThreeRendererBackend | null {
+    return this.backend;
   }
 
   private queueRerender(): void {
@@ -912,7 +949,7 @@ export class WebGPUManimRenderer {
   }
 
   render(snapshot: WebGpuSnapshot): void {
-    if (!this.renderer) return;
+    if (!this.renderer || !this.backend) return;
     this.latestSnapshot = snapshot;
     for (const child of [...this.geometryRoot.children]) {
       this.geometryRoot.remove(child);
@@ -960,21 +997,40 @@ export class WebGPUManimRenderer {
       ) {
         const geometry = new LineGeometry();
         geometry.setPositions(linePositions(layer.strokePoints, layer.closed));
-        const material = new Line2NodeMaterial({
-          color: layer.stroke,
-          dashed: false,
-          depthTest: false,
-          depthWrite: false,
-          opacity: layer.strokeOpacity,
-          transparent: layer.strokeOpacity < 1
-        });
-        (material as Line2WithWidth).linewidth = Math.max(
-          1,
-          layer.strokeWidth
-        );
-        const line = new Line2(geometry, material);
-        line.renderOrder = renderOrder + 1;
-        this.geometryRoot.add(line);
+        if (this.backend === 'gpu') {
+          const material = new Line2NodeMaterial({
+            color: layer.stroke,
+            dashed: false,
+            depthTest: false,
+            depthWrite: false,
+            opacity: layer.strokeOpacity,
+            transparent: layer.strokeOpacity < 1
+          });
+          (material as Line2WithWidth).linewidth = Math.max(
+            1,
+            layer.strokeWidth
+          );
+          const line = new WebGpuLine2(geometry, material);
+          line.renderOrder = renderOrder + 1;
+          this.geometryRoot.add(line);
+        } else {
+          const material = new LineMaterial({
+            color: layer.stroke,
+            dashed: false,
+            depthTest: false,
+            depthWrite: false,
+            opacity: layer.strokeOpacity,
+            transparent: layer.strokeOpacity < 1,
+            linewidth: Math.max(1, layer.strokeWidth),
+            resolution: new Vector2(
+              Math.max(1, this.viewportWidth),
+              Math.max(1, this.viewportHeight)
+            )
+          });
+          const line = new WebGlLine2(geometry, material);
+          line.renderOrder = renderOrder + 1;
+          this.geometryRoot.add(line);
+        }
       }
     }
 
@@ -1019,5 +1075,6 @@ export class WebGPUManimRenderer {
     this.textureCache.clear();
     this.renderer?.dispose();
     this.renderer = null;
+    this.backend = null;
   }
 }

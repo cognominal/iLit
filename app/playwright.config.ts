@@ -20,7 +20,18 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 900 } },
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 900 },
+        launchOptions: {
+          args: [
+            '--enable-webgl',
+            '--ignore-gpu-blocklist',
+            '--use-angle=swiftshader',
+            '--use-gl=angle'
+          ]
+        }
+      },
     },
   ],
 });

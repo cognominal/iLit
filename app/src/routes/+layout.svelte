@@ -15,21 +15,13 @@
 
   const current = $derived(page.url.pathname);
   const captureMode = $derived(page.url.searchParams.get('capture') === '1');
-  const rendererMode = $derived(
-    page.url.searchParams.get('renderer') === 'gpu' ? 'gpu' : 'svg'
-  );
   const isTsSweepRoute = $derived(
-    (current === '/ts-sweep' || current.startsWith('/ts-scenes/')) &&
-      rendererMode !== 'gpu'
-  );
-  const isGpuSweepRoute = $derived(
-    current === '/gpu-sweep' ||
-      (current.startsWith('/ts-scenes/') && rendererMode === 'gpu')
+    current === '/ts-sweep' ||
+      current === '/gpu-sweep' ||
+      current.startsWith('/ts-scenes/')
   );
   const isTsSceneRoute = $derived(current.startsWith('/ts-scenes/'));
-  const scenePickerLabel = $derived(
-    isGpuSweepRoute ? 'GPU scenes' : 'TS scenes'
-  );
+  const scenePickerLabel = 'TS scenes';
   const tsSceneLayoutMode = $derived(
     page.url.searchParams.get('layout') === 'code-only'
       ? 'code-only'
@@ -44,11 +36,6 @@
     const next = target.value;
     if (!next || next === current) return;
     const nextUrl = new URL(next, page.url);
-    if (rendererMode === 'gpu' || current === '/gpu-sweep') {
-      nextUrl.searchParams.set('renderer', 'gpu');
-    } else {
-      nextUrl.searchParams.delete('renderer');
-    }
     if (isTsSceneRoute && tsSceneLayoutMode === 'code-only') {
       nextUrl.searchParams.set('layout', 'code-only');
     }
@@ -96,14 +83,6 @@
               class:text-slate-300={!isTsSweepRoute}
             >
               ts sweep
-            </a>
-            <a
-              href="/gpu-sweep"
-              class="text-sm font-medium hover:text-cyan-300"
-              class:text-cyan-300={isGpuSweepRoute}
-              class:text-slate-300={!isGpuSweepRoute}
-            >
-              GPU sweep
             </a>
             <button
               class="rounded-md border border-slate-700 bg-slate-950 px-2 py-1
@@ -161,15 +140,7 @@
           >
             ts sweep
           </a>
-          <a
-            href="/gpu-sweep"
-            class="text-sm font-medium hover:text-cyan-300"
-            class:text-cyan-300={isGpuSweepRoute}
-            class:text-slate-300={!isGpuSweepRoute}
-          >
-            GPU sweep
-          </a>
-          {#if isTsSweepRoute || isGpuSweepRoute}
+          {#if isTsSweepRoute}
             <label class="ml-auto flex items-center gap-2 text-sm">
               <span class="text-slate-300">{scenePickerLabel}</span>
               <select

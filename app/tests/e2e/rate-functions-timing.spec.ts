@@ -1,24 +1,19 @@
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { readDebugMobject } from './helpers/ts-scene-debug';
 
-function cxFromEllipse(markup: string | null): number {
-  const match = markup?.match(/\bcx="([^"]+)"/);
-  return match ? Number(match[1]) : Number.NaN;
-}
-
-async function readCx(dot: Locator): Promise<number> {
-  return cxFromEllipse(await dot.evaluate((node) => node.outerHTML));
-}
-
-async function setSliderValue(
-  slider: Locator,
-  value: number
-): Promise<void> {
+async function setSliderValue(page: Page, value: number): Promise<void> {
+  const slider = page.getByRole('slider', { name: 'Time slider' });
   await slider.evaluate((node, nextValue) => {
     const input = node as HTMLInputElement;
     input.value = String(nextValue);
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }, value);
+}
+
+async function dotX(page: Page): Promise<number> {
+  const dot = await readDebugMobject(page, 'dot');
+  return dot?.x ?? Number.NaN;
 }
 
 test('rate function scene goes out and back over the animation', async ({
@@ -30,31 +25,34 @@ test('rate function scene goes out and back over the animation', async ({
   );
 
   const stage = page.getByRole('img', { name: 'TS scene stage' });
-  const dot = stage.locator('#dot');
-  const slider = page.getByRole('slider', { name: 'Time slider' });
   const timeLabel = page.locator(
     'div.w-32.text-right.text-sm.tabular-nums.text-cyan-300'
   );
 
-  await expect(dot).toHaveCount(1);
+  await expect(stage).toBeVisible();
+  await expect
+    .poll(async () => stage.getAttribute('data-renderer'))
+    .toMatch(/gpu|webgl/);
+  await expect(await readDebugMobject(page, 'dot')).not.toBeNull();
+
   await page.getByRole('button', { name: 'Reset' }).click();
   await expect(timeLabel).toContainText('0.00 sec');
 
-  const startCx = await readCx(dot);
+  const startX = await dotX(page);
 
-  await setSliderValue(slider, 1);
+  await setSliderValue(page, 1);
   await expect(timeLabel).toContainText('1.00 sec');
-  await expect.poll(() => readCx(dot)).toBeGreaterThan(startCx + 150);
-  const midCx = await readCx(dot);
+  await expect.poll(() => dotX(page)).toBeGreaterThan(startX + 150);
+  const midX = await dotX(page);
 
-  await setSliderValue(slider, 2);
+  await setSliderValue(page, 2);
   await expect(timeLabel).toContainText('2.00 sec');
-  await expect.poll(() => readCx(dot)).toBeLessThan(startCx + 5);
-  const endCx = await readCx(dot);
+  await expect.poll(() => dotX(page)).toBeLessThan(startX + 5);
+  const endX = await dotX(page);
 
-  expect(Number.isFinite(startCx)).toBe(true);
-  expect(Number.isFinite(midCx)).toBe(true);
-  expect(Number.isFinite(endCx)).toBe(true);
-  expect(midCx).toBeGreaterThan(startCx + 150);
-  expect(Math.abs(endCx - startCx)).toBeLessThan(5);
+  expect(Number.isFinite(startX)).toBe(true);
+  expect(Number.isFinite(midX)).toBe(true);
+  expect(Number.isFinite(endX)).toBe(true);
+  expect(midX).toBeGreaterThan(startX + 150);
+  expect(Math.abs(endX - startX)).toBeLessThan(5);
 });

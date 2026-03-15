@@ -1,11 +1,11 @@
 <script lang="ts">
-  import TsSceneStage from '$lib/ts-feature-sweep/render/TsSceneStage.svelte';
   import {
     STAGE_HEIGHT,
     STAGE_WIDTH,
     type Mobject
   } from '$lib/manim';
   import {
+    type ThreeRendererBackend,
     WebGPUManimRenderer,
     buildWebGpuSnapshot,
     isWebGpuGeometryMobject,
@@ -42,6 +42,7 @@
   let webGpuRenderer = $state<WebGPUManimRenderer | null>(null);
   let ready = $state(false);
   let failed = $state(false);
+  let rendererBackend = $state<ThreeRendererBackend | null>(null);
 
   const orderedOverlayMobjects = $derived(
     [...mobjects]
@@ -129,12 +130,13 @@
     let cancelled = false;
     const next = new WebGPUManimRenderer(canvasEl);
     void next.init(bare ? '#000000' : '#020617')
-      .then(() => {
+      .then((backend) => {
         if (cancelled) {
           next.dispose();
           return;
         }
         webGpuRenderer = next;
+        rendererBackend = backend;
         ready = true;
         failed = false;
         resizeRenderer();
@@ -145,15 +147,8 @@
         next.dispose();
         failed = true;
         ready = false;
+        rendererBackend = null;
       });
-    return () => {
-      cancelled = true;
-      if (webGpuRenderer === next) {
-        webGpuRenderer = null;
-        ready = false;
-      }
-      next.dispose();
-    };
   });
 
   $effect(() => {
@@ -176,13 +171,14 @@
   onDestroy(() => {
     webGpuRenderer?.dispose();
     webGpuRenderer = null;
+    rendererBackend = null;
   });
 </script>
 
 <div
   bind:this={stageEl}
   data-testid="webgpu-scene-stage"
-  data-renderer={ready ? 'gpu' : failed ? 'fallback' : 'initializing'}
+  data-renderer={ready ? rendererBackend : failed ? 'error' : 'initializing'}
   role={ready ? 'img' : undefined}
   aria-label={ready ? 'TS scene stage' : undefined}
   class={`relative w-full overflow-hidden ${bare
@@ -328,16 +324,12 @@
         {/if}
       {/each}
     </svg>
-  {:else}
-    <div class="absolute inset-0">
-      <TsSceneStage
-        {mobjects}
-        {progressById}
-        {bare}
-        {replacements}
-        {completedReplacementSources}
-        {completedReplacementTargets}
-      />
+  {:else if failed}
+    <div
+      class="absolute inset-0 flex items-center justify-center p-4 text-sm
+      text-rose-200"
+    >
+      Three.js renderer initialization failed.
     </div>
   {/if}
 </div>
