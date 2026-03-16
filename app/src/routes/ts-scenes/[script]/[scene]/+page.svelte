@@ -1099,7 +1099,7 @@
             >
               {#snippet a()}
                 <div class="flex h-full min-h-0 flex-col">
-                  <div class="mb-2 flex items-baseline gap-2">
+                  <div class="mb-2 flex items-center gap-2">
                     <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
                       Python Source
                     </h2>
@@ -1144,7 +1144,7 @@
 
               {#snippet b()}
                 <div class="flex h-full min-h-0 flex-col">
-                  <div class="mb-2 flex items-baseline gap-2">
+                  <div class="mb-2 flex items-center gap-2">
                     <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
                       TypeScript Source {tsIsDirty ? '●' : ''}
                     </h2>
