@@ -456,6 +456,7 @@ The button label should be one of:
 
 Expected behavior:
 
+- `go to line` is the default state on page load
 - `inactive` means normal pointer interaction mode
 - `go to line` means click-to-source-navigation mode is armed
 - the label itself communicates the current state

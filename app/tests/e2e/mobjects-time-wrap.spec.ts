@@ -61,6 +61,8 @@ test('mobjects basics routes pointer events through retained objects', async ({
   await expect(page).toHaveURL('/ts-scenes/mobjects_basics/basics_layout');
 
   await page.getByRole('button', { name: 'Reset' }).click({ force: true });
+  await page.getByRole('button', { name: 'go to line' }).click();
+  await expect(page.getByRole('button', { name: 'inactive' })).toBeVisible();
   const stage = await waitForStage(page);
 
   const square = await readDebugMobject(page, 'square');
@@ -131,7 +133,6 @@ test('mobjects basics can jump editor to a clicked mobject source line', async (
   const square = await readDebugMobject(page, 'square');
   expect(square?.sourceRef?.line).toBeDefined();
 
-  await page.getByRole('button', { name: 'inactive' }).click();
   await expect(page.getByRole('button', { name: 'go to line' })).toBeVisible();
 
   const box = await stage.boundingBox();

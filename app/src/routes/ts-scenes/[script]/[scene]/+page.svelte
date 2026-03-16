@@ -113,7 +113,7 @@
   let pyEditorViewState = $state<CodeMirrorViewState | null>(null);
   let tsEditorViewState = $state<CodeMirrorViewState | null>(null);
   let tsEditorFocusRequestKey = $state(0);
-  let sourceNavigationMode = $state<'inactive' | 'goToLine'>('inactive');
+  let sourceNavigationMode = $state<'inactive' | 'goToLine'>('goToLine');
 
   let scene = $state<Scene | null>(null);
   let sceneResolved = $state(false);
