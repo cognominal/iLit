@@ -114,6 +114,7 @@
   let tsEditorViewState = $state<CodeMirrorViewState | null>(null);
   let tsEditorFocusRequestKey = $state(0);
   let sourceNavigationMode = $state<'inactive' | 'goToLine'>('goToLine');
+  let pythonPaneOpen = $state(false);
 
   let scene = $state<Scene | null>(null);
   let sceneResolved = $state(false);
@@ -132,9 +133,13 @@
   const codeMirrorStorageKey = $derived(
     `ts-scene-codemirror:v1:${data.script.id}:${data.scene.id}`
   );
+  const sourcePaneStorageKey = $derived(
+    `ts-scene-source-pane:v1:${data.script.id}:${data.scene.id}`
+  );
   let layoutRestoredKey = $state('');
   let mp4PrefsRestoredKey = $state('');
   let codeMirrorRestoredKey = $state('');
+  let sourcePaneRestoredKey = $state('');
   let clientReady = $state(false);
   const progress = $derived(progress01(timeline));
   const captureMode = $derived(page.url.searchParams.get('capture') === '1');
@@ -388,6 +393,34 @@
     }
   }
 
+  function restoreSourcePaneStateFromStorage(): void {
+    if (!browser || captureMode) return;
+    const raw = localStorage.getItem(sourcePaneStorageKey);
+    if (!raw) {
+      sourcePaneRestoredKey = sourcePaneStorageKey;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as {
+        pythonPaneOpen?: boolean;
+      };
+      if (typeof parsed.pythonPaneOpen === 'boolean') {
+        pythonPaneOpen = parsed.pythonPaneOpen;
+      }
+    } catch {
+      // Ignore malformed source pane state.
+    } finally {
+      sourcePaneRestoredKey = sourcePaneStorageKey;
+    }
+  }
+
+  function publishSourcePaneState(): void {
+    if (!browser) return;
+    window.dispatchEvent(new CustomEvent('ts-source-pane-change', {
+      detail: { key: sourcePaneStorageKey, open: pythonPaneOpen }
+    }));
+  }
+
   $effect(() => {
     if (!browser || captureMode) return;
     document.documentElement.style.setProperty('--ts-left-pane', mainSplitPos);
@@ -412,6 +445,13 @@
     codeMirrorStorageKey;
     if (codeMirrorRestoredKey === codeMirrorStorageKey) return;
     restoreCodeMirrorStateFromStorage();
+  });
+
+  $effect(() => {
+    if (!browser || captureMode) return;
+    sourcePaneStorageKey;
+    if (sourcePaneRestoredKey === sourcePaneStorageKey) return;
+    restoreSourcePaneStateFromStorage();
   });
 
   $effect(() => {
@@ -445,6 +485,16 @@
       ts: tsEditorViewState,
     };
     localStorage.setItem(codeMirrorStorageKey, JSON.stringify(payload));
+  });
+
+  $effect(() => {
+    if (!browser || captureMode) return;
+    if (sourcePaneRestoredKey !== sourcePaneStorageKey) return;
+    const payload = {
+      pythonPaneOpen,
+    };
+    localStorage.setItem(sourcePaneStorageKey, JSON.stringify(payload));
+    publishSourcePaneState();
   });
 
   $effect(() => {
@@ -486,14 +536,36 @@
     restoreLayoutFromStorage();
     restoreMp4PrefsFromStorage();
     restoreCodeMirrorStateFromStorage();
+    restoreSourcePaneStateFromStorage();
+
+    const onSourcePaneRequest = (event: Event) => {
+      const custom = event as CustomEvent<{ key?: string; open?: boolean }>;
+      if (custom.detail?.key !== sourcePaneStorageKey) return;
+      pythonPaneOpen = Boolean(custom.detail?.open);
+    };
+    window.addEventListener(
+      'ts-source-pane-request',
+      onSourcePaneRequest as EventListener
+    );
 
     if (captureMode && !captureAutoplay) {
       const onStartCapture = () => startCapturePlayback();
       window.addEventListener('ts-sweep-capture-start', onStartCapture);
       return () => {
+        window.removeEventListener(
+          'ts-source-pane-request',
+          onSourcePaneRequest as EventListener
+        );
         window.removeEventListener('ts-sweep-capture-start', onStartCapture);
       };
     }
+
+    return () => {
+      window.removeEventListener(
+        'ts-source-pane-request',
+        onSourcePaneRequest as EventListener
+      );
+    };
   });
 
   const tsIsDirty = $derived(tsEditorText !== tsBaseText);
@@ -1088,147 +1160,251 @@
 
         {#snippet b()}
           <aside class="h-full border-l border-slate-800 bg-slate-900/60 p-4">
-            <SplitPane
-              id="ts-code-split"
-              type="rows"
-              bind:pos={codeSplitPos}
-              min="220px"
-              max="-220px"
-              --color="#1f2937"
-              --thickness="12px"
-            >
-              {#snippet a()}
-                <div class="flex h-full min-h-0 flex-col">
-                  <div class="mb-2 flex items-center gap-2">
-                    <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
-                      Python Source
-                    </h2>
-                    <p class="min-w-0 truncate text-xs text-slate-400">
-                      {data.pySourcePath}
-                    </p>
-                    <button
-                      class="shrink-0 rounded border border-slate-700 p-1 text-slate-300
-                      hover:text-cyan-300"
-                      onclick={() => copyText(data.pySourcePath)}
-                      aria-label="Copy Python source path"
-                      title="Copy Python source path"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        class="h-3.5 w-3.5"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
-                        <rect x="9" y="9" width="13" height="13" rx="2"></rect>
-                        <path
-                          d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2
-                          2v1"
-                        ></path>
-                      </svg>
-                    </button>
-                  </div>
-                  {#key `py:${data.script.id}:${data.scene.id}`}
-                    <ReadOnlyCodeMirror
-                      value={data.pySourceText}
-                      language="python"
-                      testId="py-code-editor"
-                      heightClass="h-full"
-                      initialViewState={pyEditorViewState}
-                      onViewStateChange={onPyEditorViewStateChange}
-                    />
-                  {/key}
-                </div>
-              {/snippet}
+            <div class="flex h-full min-h-0 flex-col">
+              <div class="flex-1 min-h-0">
+                {#if pythonPaneOpen}
+                  <SplitPane
+                    id="ts-code-split"
+                    type="rows"
+                    bind:pos={codeSplitPos}
+                    min="220px"
+                    max="-220px"
+                    --color="#1f2937"
+                    --thickness="12px"
+                  >
+                    {#snippet a()}
+                      <div class="flex h-full min-h-0 flex-col">
+                        <div class="mb-2 flex items-center gap-2">
+                          <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
+                            TypeScript Source {tsIsDirty ? '●' : ''}
+                          </h2>
+                          <p class="min-w-0 truncate text-xs text-slate-400">
+                            {data.tsSourcePath}
+                          </p>
+                          {#if data.sourceEditingEnabled}
+                            <span
+                              class="shrink-0 text-xs"
+                              class:text-emerald-300={saveState === 'saved'}
+                              class:text-amber-300={tsIsDirty || saveState === 'saving'}
+                              class:text-rose-300={saveState === 'error' || saveState === 'conflict'}
+                              class:text-slate-400={!tsIsDirty && saveState === 'idle'}
+                            >
+                              {saveState === 'idle' && tsIsDirty ? 'Dirty' :
+                                saveState === 'idle' ? '' :
+                                saveState === 'saving' ? 'Saving...' :
+                                saveState === 'saved' ? 'Saved' :
+                                saveState === 'conflict' ? 'Conflict' : 'Error'}
+                            </span>
+                            {#if saveMessage}
+                              <span class="shrink-0 text-xs text-slate-400">
+                                {saveMessage}
+                              </span>
+                            {/if}
+                            <button
+                              class="shrink-0 rounded border border-emerald-700 px-2 py-1
+                              text-xs text-emerald-300 disabled:opacity-50"
+                              onclick={() => void saveTsSource()}
+                              disabled={!tsIsDirty || saveState === 'saving'}
+                              title="Save (Ctrl/Cmd+S)"
+                            >
+                              Save
+                            </button>
+                            {#if saveState === 'conflict'}
+                              <button
+                                class="shrink-0 rounded border border-rose-700 px-2 py-1
+                                text-xs text-rose-300"
+                                onclick={() => void saveTsSource(true)}
+                                title="Force overwrite"
+                              >
+                                Force
+                              </button>
+                            {/if}
+                          {/if}
+                          <button
+                            class="shrink-0 rounded border border-slate-700 p-1 text-slate-300
+                            hover:text-cyan-300"
+                            onclick={() => copyText(data.tsSourcePath)}
+                            aria-label="Copy TypeScript source path"
+                            title="Copy TypeScript source path"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              class="h-3.5 w-3.5"
+                              stroke="currentColor"
+                              stroke-width="2"
+                            >
+                              <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                              <path
+                                d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2
+                                2v1"
+                              ></path>
+                            </svg>
+                          </button>
+                        </div>
+                        {#key `${data.script.id}:${data.scene.id}:${tsSourceMtimeMs ?? 0}`}
+                          <ReadOnlyCodeMirror
+                            value={tsBaseText}
+                            language="typescript"
+                            testId="ts-code-editor"
+                            heightClass="h-full"
+                            editable={tsEditorEditable}
+                            focusRequestKey={tsEditorFocusRequestKey}
+                            initialViewState={tsEditorViewState}
+                            onChange={onTsEditorChange}
+                            onViewStateChange={onTsEditorViewStateChange}
+                          />
+                        {/key}
+                      </div>
+                    {/snippet}
 
-              {#snippet b()}
-                <div class="flex h-full min-h-0 flex-col">
-                  <div class="mb-2 flex items-center gap-2">
-                    <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
-                      TypeScript Source {tsIsDirty ? '●' : ''}
-                    </h2>
-                    <p class="min-w-0 truncate text-xs text-slate-400">
-                      {data.tsSourcePath}
-                    </p>
-                    {#if data.sourceEditingEnabled}
-                      <span
-                        class="shrink-0 text-xs"
-                        class:text-emerald-300={saveState === 'saved'}
-                        class:text-amber-300={tsIsDirty || saveState === 'saving'}
-                        class:text-rose-300={saveState === 'error' || saveState === 'conflict'}
-                        class:text-slate-400={!tsIsDirty && saveState === 'idle'}
-                      >
-                        {saveState === 'idle' && tsIsDirty ? 'Dirty' :
-                          saveState === 'idle' ? '' :
-                          saveState === 'saving' ? 'Saving...' :
-                          saveState === 'saved' ? 'Saved' :
-                          saveState === 'conflict' ? 'Conflict' : 'Error'}
-                      </span>
-                      {#if saveMessage}
-                        <span class="shrink-0 text-xs text-slate-400">
-                          {saveMessage}
+                    {#snippet b()}
+                      <div class="flex h-full min-h-0 flex-col">
+                        <div class="mb-2 flex items-center gap-2">
+                          <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
+                            Python Source
+                          </h2>
+                          <p class="min-w-0 truncate text-xs text-slate-400">
+                            {data.pySourcePath}
+                          </p>
+                          <div class="ml-auto flex shrink-0 items-center gap-1">
+                            <button
+                              class="rounded border border-slate-700 p-1 text-slate-300
+                              hover:text-cyan-300"
+                              onclick={() => copyText(data.pySourcePath)}
+                              aria-label="Copy Python source path"
+                              title="Copy Python source path"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                class="h-3.5 w-3.5"
+                                stroke="currentColor"
+                                stroke-width="2"
+                              >
+                                <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                                <path
+                                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2
+                                  2v1"
+                                ></path>
+                              </svg>
+                            </button>
+                            <button
+                              class="rounded border border-slate-700 px-2 py-1 text-xs
+                              text-slate-300 hover:text-cyan-300"
+                              onclick={() => {
+                                pythonPaneOpen = false;
+                              }}
+                              aria-label="Close Python source pane"
+                              title="Close Python source pane"
+                            >
+                              x
+                            </button>
+                          </div>
+                        </div>
+                        {#key `py:${data.script.id}:${data.scene.id}`}
+                          <ReadOnlyCodeMirror
+                            value={data.pySourceText}
+                            language="python"
+                            testId="py-code-editor"
+                            heightClass="h-full"
+                            initialViewState={pyEditorViewState}
+                            onViewStateChange={onPyEditorViewStateChange}
+                          />
+                        {/key}
+                      </div>
+                    {/snippet}
+                  </SplitPane>
+                {:else}
+                  <div class="flex h-full min-h-0 flex-col">
+                    <div class="mb-2 flex items-center gap-2">
+                      <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
+                        TypeScript Source {tsIsDirty ? '●' : ''}
+                      </h2>
+                      <p class="min-w-0 truncate text-xs text-slate-400">
+                        {data.tsSourcePath}
+                      </p>
+                      {#if data.sourceEditingEnabled}
+                        <span
+                          class="shrink-0 text-xs"
+                          class:text-emerald-300={saveState === 'saved'}
+                          class:text-amber-300={tsIsDirty || saveState === 'saving'}
+                          class:text-rose-300={saveState === 'error' || saveState === 'conflict'}
+                          class:text-slate-400={!tsIsDirty && saveState === 'idle'}
+                        >
+                          {saveState === 'idle' && tsIsDirty ? 'Dirty' :
+                            saveState === 'idle' ? '' :
+                            saveState === 'saving' ? 'Saving...' :
+                            saveState === 'saved' ? 'Saved' :
+                            saveState === 'conflict' ? 'Conflict' : 'Error'}
                         </span>
+                        {#if saveMessage}
+                          <span class="shrink-0 text-xs text-slate-400">
+                            {saveMessage}
+                          </span>
+                        {/if}
+                        <button
+                          class="shrink-0 rounded border border-emerald-700 px-2 py-1
+                          text-xs text-emerald-300 disabled:opacity-50"
+                          onclick={() => void saveTsSource()}
+                          disabled={!tsIsDirty || saveState === 'saving'}
+                          title="Save (Ctrl/Cmd+S)"
+                        >
+                          Save
+                        </button>
+                        {#if saveState === 'conflict'}
+                          <button
+                            class="shrink-0 rounded border border-rose-700 px-2 py-1
+                            text-xs text-rose-300"
+                            onclick={() => void saveTsSource(true)}
+                            title="Force overwrite"
+                          >
+                            Force
+                          </button>
+                        {/if}
                       {/if}
                       <button
-                        class="shrink-0 rounded border border-emerald-700 px-2 py-1
-                        text-xs text-emerald-300 disabled:opacity-50"
-                        onclick={() => void saveTsSource()}
-                        disabled={!tsIsDirty || saveState === 'saving'}
-                        title="Save (Ctrl/Cmd+S)"
+                        class="shrink-0 rounded border border-slate-700 p-1 text-slate-300
+                        hover:text-cyan-300"
+                        onclick={() => copyText(data.tsSourcePath)}
+                        aria-label="Copy TypeScript source path"
+                        title="Copy TypeScript source path"
                       >
-                        Save
-                      </button>
-                      {#if saveState === 'conflict'}
-                        <button
-                          class="shrink-0 rounded border border-rose-700 px-2 py-1
-                          text-xs text-rose-300"
-                          onclick={() => void saveTsSource(true)}
-                          title="Force overwrite"
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          class="h-3.5 w-3.5"
+                          stroke="currentColor"
+                          stroke-width="2"
                         >
-                          Force
-                        </button>
-                      {/if}
-                    {/if}
-                    <button
-                      class="shrink-0 rounded border border-slate-700 p-1 text-slate-300
-                      hover:text-cyan-300"
-                      onclick={() => copyText(data.tsSourcePath)}
-                      aria-label="Copy TypeScript source path"
-                      title="Copy TypeScript source path"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        class="h-3.5 w-3.5"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
-                        <rect x="9" y="9" width="13" height="13" rx="2"></rect>
-                        <path
-                          d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2
-                          2v1"
-                        ></path>
-                      </svg>
-                    </button>
+                          <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                          <path
+                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2
+                            2v1"
+                          ></path>
+                        </svg>
+                      </button>
+                    </div>
+                    {#key `${data.script.id}:${data.scene.id}:${tsSourceMtimeMs ?? 0}:solo`}
+                      <ReadOnlyCodeMirror
+                        value={tsBaseText}
+                        language="typescript"
+                        testId="ts-code-editor"
+                        heightClass="h-full"
+                        editable={tsEditorEditable}
+                        focusRequestKey={tsEditorFocusRequestKey}
+                        initialViewState={tsEditorViewState}
+                        onChange={onTsEditorChange}
+                        onViewStateChange={onTsEditorViewStateChange}
+                      />
+                    {/key}
                   </div>
-                  {#key `${data.script.id}:${data.scene.id}:${tsSourceMtimeMs ?? 0}`}
-                    <ReadOnlyCodeMirror
-                      value={tsBaseText}
-                      language="typescript"
-                      testId="ts-code-editor"
-                      heightClass="h-full"
-                      editable={tsEditorEditable}
-                      focusRequestKey={tsEditorFocusRequestKey}
-                      initialViewState={tsEditorViewState}
-                      onChange={onTsEditorChange}
-                      onViewStateChange={onTsEditorViewStateChange}
-                    />
-                  {/key}
-                </div>
-              {/snippet}
-            </SplitPane>
+                {/if}
+              </div>
+            </div>
           </aside>
         {/snippet}
       </SplitPane>

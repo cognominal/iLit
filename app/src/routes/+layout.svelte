@@ -1,8 +1,10 @@
 <script lang="ts">
   import '../app.css';
+  import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { tsScripts } from '$lib/ts-feature-sweep/catalog';
+  import { onMount } from 'svelte';
 
   const { children } = $props<{ children: () => unknown }>();
 
@@ -30,6 +32,64 @@
   const tsSceneNextLayoutMode = $derived(
     tsSceneLayoutMode === 'default' ? 'code-only' : 'default'
   );
+  const sourcePaneStorageKey = $derived.by(() => {
+    if (!isTsSceneRoute) return '';
+    const parts = current.split('/');
+    const scriptId = parts[2];
+    const sceneId = parts[3];
+    if (!scriptId || !sceneId) return '';
+    return `ts-scene-source-pane:v1:${scriptId}:${sceneId}`;
+  });
+  let pythonPaneOpen = $state(false);
+
+  function readPythonPaneState(): void {
+    if (!browser || !sourcePaneStorageKey) return;
+    const raw = localStorage.getItem(sourcePaneStorageKey);
+    if (!raw) {
+      pythonPaneOpen = false;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as { pythonPaneOpen?: boolean };
+      pythonPaneOpen = parsed.pythonPaneOpen ?? false;
+    } catch {
+      pythonPaneOpen = false;
+    }
+  }
+
+  function openPythonPane(): void {
+    if (!browser || !sourcePaneStorageKey) return;
+    pythonPaneOpen = true;
+    localStorage.setItem(
+      sourcePaneStorageKey,
+      JSON.stringify({ pythonPaneOpen: true })
+    );
+    window.dispatchEvent(new CustomEvent('ts-source-pane-request', {
+      detail: { key: sourcePaneStorageKey, open: true }
+    }));
+  }
+
+  onMount(() => {
+    if (!browser) return;
+    const onPaneChange = (event: Event) => {
+      const custom = event as CustomEvent<{ key?: string; open?: boolean }>;
+      if (custom.detail?.key !== sourcePaneStorageKey) return;
+      pythonPaneOpen = Boolean(custom.detail?.open);
+    };
+    window.addEventListener('ts-source-pane-change', onPaneChange as EventListener);
+    return () => {
+      window.removeEventListener(
+        'ts-source-pane-change',
+        onPaneChange as EventListener
+      );
+    };
+  });
+
+  $effect(() => {
+    if (!browser || !isTsSceneRoute) return;
+    sourcePaneStorageKey;
+    readPythonPaneState();
+  });
 
   async function onTsChange(event: Event): Promise<void> {
     const target = event.currentTarget as HTMLSelectElement;
@@ -101,6 +161,16 @@
             >
               Source pane
             </span>
+            {#if tsSceneLayoutMode === 'default' && !pythonPaneOpen}
+              <button
+                class="rounded border border-slate-700 px-2 py-1 text-xs
+                text-slate-300 hover:text-cyan-300"
+                onclick={openPythonPane}
+                type="button"
+              >
+                python
+              </button>
+            {/if}
             <label class="ml-auto flex min-w-0 items-center gap-2 text-sm">
               <span class="text-slate-300">{scenePickerLabel}</span>
               <select
