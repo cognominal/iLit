@@ -2,7 +2,8 @@
   import { browser } from '$app/environment';
   import { onDestroy, onMount } from 'svelte';
   import { Annotation, EditorSelection, EditorState } from '@codemirror/state';
-  import { EditorView } from '@codemirror/view';
+  import { foldGutter, foldKeymap } from '@codemirror/language';
+  import { EditorView, keymap, lineNumbers } from '@codemirror/view';
   import { python } from '@codemirror/lang-python';
   import { javascript } from '@codemirror/lang-javascript';
   import { oneDark } from '@codemirror/theme-one-dark';
@@ -109,9 +110,12 @@
       selection,
       extensions: [
         oneDark,
+        lineNumbers(),
+        foldGutter(),
         extensionFor(language),
         EditorState.readOnly.of(!editable),
         EditorView.editable.of(editable),
+        keymap.of(foldKeymap),
         EditorView.updateListener.of((update) => {
           if (update.transactions.some((tx) => tx.annotation(syncAnnotation))) {
             return;
@@ -189,5 +193,10 @@
 
   :global(.cm-scroller) {
     overflow: auto;
+  }
+
+  :global(.cm-gutters) {
+    border-right: 1px solid rgb(51 65 85);
+    background: rgb(15 23 42 / 0.92);
   }
 </style>

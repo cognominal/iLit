@@ -72,6 +72,74 @@
     };
   };
 
+  const DOCUMENTED_DLL_SOURCE = `class DLNode {
+  public L: DLNode;
+  public R: DLNode;
+  public value: any;
+
+  constructor(value: any) {
+    this.value = value;
+    this.L = this;
+    this.R = this;
+  }
+}
+
+class DancingLinkedList {
+  private head: DLNode;
+
+  constructor(values: any[]) {
+    this.head = new DLNode("HEAD");
+    let current = this.head;
+
+    for (const val of values) {
+      const newNode = new DLNode(val);
+      newNode.L = current;
+      newNode.R = current.R;
+      current.R.L = newNode;
+      current.R = newNode;
+      current = newNode;
+    }
+  }
+
+  /**
+   * Knuth's Equation (1): Deleting a node.
+   * Note: The node X itself still points to its old neighbors!
+   */
+  public remove(x: DLNode): void {
+    x.R.L = x.L;
+    x.L.R = x.R;
+  }
+
+  /**
+   * Knuth's Equation (2): Restoring a node (Backtrack).
+   * This only works if restored in the exact reverse order of removal.
+   */
+  public restore(x: DLNode): void {
+    x.R.L = x;
+    x.L.R = x;
+  }
+
+  public toArray(): any[] {
+    const result = [];
+    let current = this.head.R;
+    while (current !== this.head) {
+      result.push(current.value);
+      current = current.R;
+    }
+    return result;
+  }
+
+  public getNodes(): DLNode[] {
+    const nodes = [];
+    let current = this.head.R;
+    while (current !== this.head) {
+      nodes.push(current);
+      current = current.R;
+    }
+    return nodes;
+  }
+}`;
+
   let timeline = $state(createTimelineControllerState(6, FRAME_STEP_SEC));
   let exportingProfile = $state<null | 'lowres' | 'medres' | 'hires'>(null);
   let exportMessage = $state('');
@@ -115,6 +183,7 @@
   let tsEditorFocusRequestKey = $state(0);
   let sourceNavigationMode = $state<'inactive' | 'goToLine'>('goToLine');
   let pythonPaneOpen = $state(false);
+  let documentedPaneOpen = $state(false);
 
   let scene = $state<Scene | null>(null);
   let sceneResolved = $state(false);
@@ -124,6 +193,7 @@
   let mainSplitPos = $state<Length>('52%');
   let codeSplitPos = $state<Length>('50%');
   let codeOnlySplitPos = $state<Length>('50%');
+  let sourceSupplementalSplitPos = $state<Length>('50%');
   const layoutStorageKey = $derived(
     `ts-scene-layout:v1:${data.script.id}:${data.scene.id}`
   );
@@ -135,6 +205,10 @@
   );
   const sourcePaneStorageKey = $derived(
     `ts-scene-source-pane:v1:${data.script.id}:${data.scene.id}`
+  );
+  const supportsDocumentedPane = $derived(
+    data.script.id === 'doubly_linked_list_deletion' &&
+    data.scene.id === 'dll_delete'
   );
   let layoutRestoredKey = $state('');
   let mp4PrefsRestoredKey = $state('');
@@ -403,9 +477,16 @@
     try {
       const parsed = JSON.parse(raw) as {
         pythonPaneOpen?: boolean;
+        documentedPaneOpen?: boolean;
       };
       if (typeof parsed.pythonPaneOpen === 'boolean') {
         pythonPaneOpen = parsed.pythonPaneOpen;
+      }
+      if (supportsDocumentedPane &&
+        typeof parsed.documentedPaneOpen === 'boolean') {
+        documentedPaneOpen = parsed.documentedPaneOpen;
+      } else {
+        documentedPaneOpen = false;
       }
     } catch {
       // Ignore malformed source pane state.
@@ -417,7 +498,11 @@
   function publishSourcePaneState(): void {
     if (!browser) return;
     window.dispatchEvent(new CustomEvent('ts-source-pane-change', {
-      detail: { key: sourcePaneStorageKey, open: pythonPaneOpen }
+      detail: {
+        key: sourcePaneStorageKey,
+        pythonPaneOpen,
+        documentedPaneOpen
+      }
     }));
   }
 
@@ -450,6 +535,7 @@
   $effect(() => {
     if (!browser || captureMode) return;
     sourcePaneStorageKey;
+    supportsDocumentedPane;
     if (sourcePaneRestoredKey === sourcePaneStorageKey) return;
     restoreSourcePaneStateFromStorage();
   });
@@ -492,6 +578,7 @@
     if (sourcePaneRestoredKey !== sourcePaneStorageKey) return;
     const payload = {
       pythonPaneOpen,
+      documentedPaneOpen: supportsDocumentedPane ? documentedPaneOpen : false,
     };
     localStorage.setItem(sourcePaneStorageKey, JSON.stringify(payload));
     publishSourcePaneState();
@@ -539,8 +626,18 @@
     restoreSourcePaneStateFromStorage();
 
     const onSourcePaneRequest = (event: Event) => {
-      const custom = event as CustomEvent<{ key?: string; open?: boolean }>;
+      const custom = event as CustomEvent<{
+        key?: string;
+        pane?: 'python' | 'documented';
+        open?: boolean;
+      }>;
       if (custom.detail?.key !== sourcePaneStorageKey) return;
+      if (custom.detail?.pane === 'documented') {
+        if (supportsDocumentedPane) {
+          documentedPaneOpen = Boolean(custom.detail?.open);
+        }
+        return;
+      }
       pythonPaneOpen = Boolean(custom.detail?.open);
     };
     window.addEventListener(
@@ -1162,7 +1259,205 @@
           <aside class="h-full border-l border-slate-800 bg-slate-900/60 p-4">
             <div class="flex h-full min-h-0 flex-col">
               <div class="flex-1 min-h-0">
-                {#if pythonPaneOpen}
+                {#if pythonPaneOpen && documentedPaneOpen}
+                  <SplitPane
+                    id="ts-code-split"
+                    type="rows"
+                    bind:pos={codeSplitPos}
+                    min="220px"
+                    max="-220px"
+                    --color="#1f2937"
+                    --thickness="12px"
+                  >
+                    {#snippet a()}
+                      <div class="flex h-full min-h-0 flex-col">
+                        <div class="mb-2 flex items-center gap-2">
+                          <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
+                            TypeScript Source {tsIsDirty ? '●' : ''}
+                          </h2>
+                          <p class="min-w-0 truncate text-xs text-slate-400">
+                            {data.tsSourcePath}
+                          </p>
+                          {#if data.sourceEditingEnabled}
+                            <span
+                              class="shrink-0 text-xs"
+                              class:text-emerald-300={saveState === 'saved'}
+                              class:text-amber-300={tsIsDirty || saveState === 'saving'}
+                              class:text-rose-300={saveState === 'error' || saveState === 'conflict'}
+                              class:text-slate-400={!tsIsDirty && saveState === 'idle'}
+                            >
+                              {saveState === 'idle' && tsIsDirty ? 'Dirty' :
+                                saveState === 'idle' ? '' :
+                                saveState === 'saving' ? 'Saving...' :
+                                saveState === 'saved' ? 'Saved' :
+                                saveState === 'conflict' ? 'Conflict' : 'Error'}
+                            </span>
+                            {#if saveMessage}
+                              <span class="shrink-0 text-xs text-slate-400">
+                                {saveMessage}
+                              </span>
+                            {/if}
+                            <button
+                              class="shrink-0 rounded border border-emerald-700 px-2 py-1
+                              text-xs text-emerald-300 disabled:opacity-50"
+                              onclick={() => void saveTsSource()}
+                              disabled={!tsIsDirty || saveState === 'saving'}
+                              title="Save (Ctrl/Cmd+S)"
+                            >
+                              Save
+                            </button>
+                            {#if saveState === 'conflict'}
+                              <button
+                                class="shrink-0 rounded border border-rose-700 px-2 py-1
+                                text-xs text-rose-300"
+                                onclick={() => void saveTsSource(true)}
+                                title="Force overwrite"
+                              >
+                                Force
+                              </button>
+                            {/if}
+                          {/if}
+                          <button
+                            class="shrink-0 rounded border border-slate-700 p-1 text-slate-300
+                            hover:text-cyan-300"
+                            onclick={() => copyText(data.tsSourcePath)}
+                            aria-label="Copy TypeScript source path"
+                            title="Copy TypeScript source path"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              class="h-3.5 w-3.5"
+                              stroke="currentColor"
+                              stroke-width="2"
+                            >
+                              <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                              <path
+                                d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2
+                                2v1"
+                              ></path>
+                            </svg>
+                          </button>
+                        </div>
+                        {#key `${data.script.id}:${data.scene.id}:${tsSourceMtimeMs ?? 0}`}
+                          <ReadOnlyCodeMirror
+                            value={tsBaseText}
+                            language="typescript"
+                            testId="ts-code-editor"
+                            heightClass="h-full"
+                            editable={tsEditorEditable}
+                            focusRequestKey={tsEditorFocusRequestKey}
+                            initialViewState={tsEditorViewState}
+                            onChange={onTsEditorChange}
+                            onViewStateChange={onTsEditorViewStateChange}
+                          />
+                        {/key}
+                      </div>
+                    {/snippet}
+
+                    {#snippet b()}
+                      <SplitPane
+                        id="ts-code-supplemental-split"
+                        type="rows"
+                        bind:pos={sourceSupplementalSplitPos}
+                        min="180px"
+                        max="-180px"
+                        --color="#1f2937"
+                        --thickness="12px"
+                      >
+                        {#snippet a()}
+                          <div class="flex h-full min-h-0 flex-col">
+                            <div class="mb-2 flex items-center gap-2">
+                              <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
+                                Python Source
+                              </h2>
+                              <p class="min-w-0 truncate text-xs text-slate-400">
+                                {data.pySourcePath}
+                              </p>
+                              <div class="ml-auto flex shrink-0 items-center gap-1">
+                                <button
+                                  class="rounded border border-slate-700 p-1 text-slate-300
+                                  hover:text-cyan-300"
+                                  onclick={() => copyText(data.pySourcePath)}
+                                  aria-label="Copy Python source path"
+                                  title="Copy Python source path"
+                                >
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    class="h-3.5 w-3.5"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                  >
+                                    <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                                    <path
+                                      d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2
+                                      2v1"
+                                    ></path>
+                                  </svg>
+                                </button>
+                                <button
+                                  class="rounded border border-slate-700 px-2 py-1 text-xs
+                                  text-slate-300 hover:text-cyan-300"
+                                  onclick={() => {
+                                    pythonPaneOpen = false;
+                                  }}
+                                  aria-label="Close Python source pane"
+                                  title="Close Python source pane"
+                                >
+                                  x
+                                </button>
+                              </div>
+                            </div>
+                            {#key `py:${data.script.id}:${data.scene.id}`}
+                              <ReadOnlyCodeMirror
+                                value={data.pySourceText}
+                                language="python"
+                                testId="py-code-editor"
+                                heightClass="h-full"
+                                initialViewState={pyEditorViewState}
+                                onViewStateChange={onPyEditorViewStateChange}
+                              />
+                            {/key}
+                          </div>
+                        {/snippet}
+
+                        {#snippet b()}
+                          <div class="flex h-full min-h-0 flex-col">
+                            <div class="mb-2 flex items-center gap-2">
+                              <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
+                                Documented
+                              </h2>
+                              <div class="ml-auto flex shrink-0 items-center gap-1">
+                                <button
+                                  class="rounded border border-slate-700 px-2 py-1 text-xs
+                                  text-slate-300 hover:text-cyan-300"
+                                  onclick={() => {
+                                    documentedPaneOpen = false;
+                                  }}
+                                  aria-label="Close documented source pane"
+                                  title="Close documented source pane"
+                                >
+                                  x
+                                </button>
+                              </div>
+                            </div>
+                            {#key `documented:${data.script.id}:${data.scene.id}`}
+                              <ReadOnlyCodeMirror
+                                value={DOCUMENTED_DLL_SOURCE}
+                                language="typescript"
+                                testId="documented-code-editor"
+                                heightClass="h-full"
+                              />
+                            {/key}
+                          </div>
+                        {/snippet}
+                      </SplitPane>
+                    {/snippet}
+                  </SplitPane>
+                {:else if pythonPaneOpen}
                   <SplitPane
                     id="ts-code-split"
                     type="rows"
@@ -1312,6 +1607,134 @@
                             heightClass="h-full"
                             initialViewState={pyEditorViewState}
                             onViewStateChange={onPyEditorViewStateChange}
+                          />
+                        {/key}
+                      </div>
+                    {/snippet}
+                  </SplitPane>
+                {:else if documentedPaneOpen}
+                  <SplitPane
+                    id="ts-code-split"
+                    type="rows"
+                    bind:pos={codeSplitPos}
+                    min="220px"
+                    max="-220px"
+                    --color="#1f2937"
+                    --thickness="12px"
+                  >
+                    {#snippet a()}
+                      <div class="flex h-full min-h-0 flex-col">
+                        <div class="mb-2 flex items-center gap-2">
+                          <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
+                            TypeScript Source {tsIsDirty ? '●' : ''}
+                          </h2>
+                          <p class="min-w-0 truncate text-xs text-slate-400">
+                            {data.tsSourcePath}
+                          </p>
+                          {#if data.sourceEditingEnabled}
+                            <span
+                              class="shrink-0 text-xs"
+                              class:text-emerald-300={saveState === 'saved'}
+                              class:text-amber-300={tsIsDirty || saveState === 'saving'}
+                              class:text-rose-300={saveState === 'error' || saveState === 'conflict'}
+                              class:text-slate-400={!tsIsDirty && saveState === 'idle'}
+                            >
+                              {saveState === 'idle' && tsIsDirty ? 'Dirty' :
+                                saveState === 'idle' ? '' :
+                                saveState === 'saving' ? 'Saving...' :
+                                saveState === 'saved' ? 'Saved' :
+                                saveState === 'conflict' ? 'Conflict' : 'Error'}
+                            </span>
+                            {#if saveMessage}
+                              <span class="shrink-0 text-xs text-slate-400">
+                                {saveMessage}
+                              </span>
+                            {/if}
+                            <button
+                              class="shrink-0 rounded border border-emerald-700 px-2 py-1
+                              text-xs text-emerald-300 disabled:opacity-50"
+                              onclick={() => void saveTsSource()}
+                              disabled={!tsIsDirty || saveState === 'saving'}
+                              title="Save (Ctrl/Cmd+S)"
+                            >
+                              Save
+                            </button>
+                            {#if saveState === 'conflict'}
+                              <button
+                                class="shrink-0 rounded border border-rose-700 px-2 py-1
+                                text-xs text-rose-300"
+                                onclick={() => void saveTsSource(true)}
+                                title="Force overwrite"
+                              >
+                                Force
+                              </button>
+                            {/if}
+                          {/if}
+                          <button
+                            class="shrink-0 rounded border border-slate-700 p-1 text-slate-300
+                            hover:text-cyan-300"
+                            onclick={() => copyText(data.tsSourcePath)}
+                            aria-label="Copy TypeScript source path"
+                            title="Copy TypeScript source path"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              class="h-3.5 w-3.5"
+                              stroke="currentColor"
+                              stroke-width="2"
+                            >
+                              <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                              <path
+                                d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2
+                                2v1"
+                              ></path>
+                            </svg>
+                          </button>
+                        </div>
+                        {#key `${data.script.id}:${data.scene.id}:${tsSourceMtimeMs ?? 0}:documented`}
+                          <ReadOnlyCodeMirror
+                            value={tsBaseText}
+                            language="typescript"
+                            testId="ts-code-editor"
+                            heightClass="h-full"
+                            editable={tsEditorEditable}
+                            focusRequestKey={tsEditorFocusRequestKey}
+                            initialViewState={tsEditorViewState}
+                            onChange={onTsEditorChange}
+                            onViewStateChange={onTsEditorViewStateChange}
+                          />
+                        {/key}
+                      </div>
+                    {/snippet}
+
+                    {#snippet b()}
+                      <div class="flex h-full min-h-0 flex-col">
+                        <div class="mb-2 flex items-center gap-2">
+                          <h2 class="text-sm font-semibold tracking-wide text-cyan-300">
+                            Documented
+                          </h2>
+                          <div class="ml-auto flex shrink-0 items-center gap-1">
+                            <button
+                              class="rounded border border-slate-700 px-2 py-1 text-xs
+                              text-slate-300 hover:text-cyan-300"
+                              onclick={() => {
+                                documentedPaneOpen = false;
+                              }}
+                              aria-label="Close documented source pane"
+                              title="Close documented source pane"
+                            >
+                              x
+                            </button>
+                          </div>
+                        </div>
+                        {#key `documented:${data.script.id}:${data.scene.id}`}
+                          <ReadOnlyCodeMirror
+                            value={DOCUMENTED_DLL_SOURCE}
+                            language="typescript"
+                            testId="documented-code-editor"
+                            heightClass="h-full"
                           />
                         {/key}
                       </div>

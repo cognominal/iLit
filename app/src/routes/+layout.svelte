@@ -40,41 +40,69 @@
     if (!scriptId || !sceneId) return '';
     return `ts-scene-source-pane:v1:${scriptId}:${sceneId}`;
   });
+  const supportsDocumentedPane = $derived.by(() => {
+    if (!isTsSceneRoute) return false;
+    const parts = current.split('/');
+    return parts[2] === 'doubly_linked_list_deletion' &&
+      parts[3] === 'dll_delete';
+  });
   let pythonPaneOpen = $state(false);
+  let documentedPaneOpen = $state(false);
 
-  function readPythonPaneState(): void {
+  function readSourcePaneState(): void {
     if (!browser || !sourcePaneStorageKey) return;
     const raw = localStorage.getItem(sourcePaneStorageKey);
     if (!raw) {
       pythonPaneOpen = false;
+      documentedPaneOpen = false;
       return;
     }
     try {
-      const parsed = JSON.parse(raw) as { pythonPaneOpen?: boolean };
+      const parsed = JSON.parse(raw) as {
+        pythonPaneOpen?: boolean;
+        documentedPaneOpen?: boolean;
+      };
       pythonPaneOpen = parsed.pythonPaneOpen ?? false;
+      documentedPaneOpen = supportsDocumentedPane
+        ? (parsed.documentedPaneOpen ?? false)
+        : false;
     } catch {
       pythonPaneOpen = false;
+      documentedPaneOpen = false;
     }
   }
 
-  function openPythonPane(): void {
+  function requestSourcePaneOpen(pane: 'python' | 'documented'): void {
     if (!browser || !sourcePaneStorageKey) return;
-    pythonPaneOpen = true;
+    if (pane === 'python') {
+      pythonPaneOpen = true;
+    } else {
+      documentedPaneOpen = true;
+    }
     localStorage.setItem(
       sourcePaneStorageKey,
-      JSON.stringify({ pythonPaneOpen: true })
+      JSON.stringify({
+        pythonPaneOpen,
+        documentedPaneOpen
+      })
     );
     window.dispatchEvent(new CustomEvent('ts-source-pane-request', {
-      detail: { key: sourcePaneStorageKey, open: true }
+      detail: { key: sourcePaneStorageKey, pane, open: true }
     }));
   }
 
   onMount(() => {
     if (!browser) return;
     const onPaneChange = (event: Event) => {
-      const custom = event as CustomEvent<{ key?: string; open?: boolean }>;
+      const custom = event as CustomEvent<{
+        key?: string;
+        pythonPaneOpen?: boolean;
+        documentedPaneOpen?: boolean;
+      }>;
       if (custom.detail?.key !== sourcePaneStorageKey) return;
-      pythonPaneOpen = Boolean(custom.detail?.open);
+      pythonPaneOpen = Boolean(custom.detail?.pythonPaneOpen);
+      documentedPaneOpen = supportsDocumentedPane &&
+        Boolean(custom.detail?.documentedPaneOpen);
     };
     window.addEventListener('ts-source-pane-change', onPaneChange as EventListener);
     return () => {
@@ -88,7 +116,8 @@
   $effect(() => {
     if (!browser || !isTsSceneRoute) return;
     sourcePaneStorageKey;
-    readPythonPaneState();
+    supportsDocumentedPane;
+    readSourcePaneState();
   });
 
   async function onTsChange(event: Event): Promise<void> {
@@ -165,10 +194,22 @@
               <button
                 class="rounded border border-slate-700 px-2 py-1 text-xs
                 text-slate-300 hover:text-cyan-300"
-                onclick={openPythonPane}
+                onclick={() => requestSourcePaneOpen('python')}
                 type="button"
               >
                 python
+              </button>
+            {/if}
+            {#if tsSceneLayoutMode === 'default' &&
+              supportsDocumentedPane &&
+              !documentedPaneOpen}
+              <button
+                class="rounded border border-slate-700 px-2 py-1 text-xs
+                text-slate-300 hover:text-cyan-300"
+                onclick={() => requestSourcePaneOpen('documented')}
+                type="button"
+              >
+                documented
               </button>
             {/if}
             <label class="ml-auto flex min-w-0 items-center gap-2 text-sm">
