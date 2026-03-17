@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { basename, resolve } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { DLXN_PY_SCRIPT_PATH } from '$lib/dlxn/scenes/dlx3x2ThreeTiles';
+import type { RequestHandler } from './$types';
 
 type Profile = 'lowres' | 'medres' | 'hires';
 
@@ -29,7 +30,7 @@ async function safeMtimeMs(path: string): Promise<number | null> {
   }
 }
 
-export async function GET({ url }) {
+export const GET: RequestHandler = async ({ url }) => {
   const profileRaw = (url.searchParams.get('profile') ?? 'medres').trim();
   const profile: Profile =
     profileRaw === 'lowres' || profileRaw === 'hires' ? profileRaw : 'medres';
@@ -59,4 +60,4 @@ export async function GET({ url }) {
     mp4MtimeMs,
     playbackUrl: `/py-mp4/dlxn/dlx_3x2_three_tiles?profile=${profile}`,
   });
-}
+};

@@ -8,6 +8,7 @@ import {
   pySourceTextFor,
   tsSourceTextFor
 } from '$lib/ts-feature-sweep/source-text';
+import type { PageServerLoad } from './$types';
 
 function repoRootFromCwd(cwd: string): string {
   return basename(cwd) === 'app' ? resolve(cwd, '..') : cwd;
@@ -21,7 +22,7 @@ async function safeRead(path: string): Promise<string> {
   }
 }
 
-export async function load({ params }) {
+export const load: PageServerLoad = async ({ params }) => {
   const script = findTsScript(params.script);
   if (!script) {
     throw error(404, `Unknown TS script: ${params.script}`);
@@ -65,4 +66,4 @@ export async function load({ params }) {
     tsSourceMtimeMs,
     sourceEditingEnabled
   };
-}
+};

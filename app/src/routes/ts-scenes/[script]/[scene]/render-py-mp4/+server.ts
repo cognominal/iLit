@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { findTsScene, findTsScript } from '$lib/ts-feature-sweep/catalog';
+import type { RequestHandler } from './$types';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,7 +23,7 @@ function outputPath(
   return resolve(repoRoot, 'media', 'py-mp4', scriptId, sceneId, `${profile}.mp4`);
 }
 
-export async function POST({ params, request }) {
+export const POST: RequestHandler = async ({ params, request }) => {
   if (process.env.VERCEL === '1') {
     throw error(403, 'MP4 generation is disabled on read-only deployments.');
   }
@@ -68,4 +69,4 @@ export async function POST({ params, request }) {
     sizeBytes: meta.size,
     mtimeMs: meta.mtimeMs
   });
-}
+};

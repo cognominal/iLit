@@ -9,6 +9,7 @@ import { findTsScene, findTsScript } from '$lib/ts-feature-sweep/catalog';
 import { pyDurationSecFor } from '$lib/ts-feature-sweep/py-duration-ms';
 import { startTsRenderJob, tsRenderJobKey } from
   '$lib/ts-feature-sweep/render-jobs';
+import type { RequestHandler } from './$types';
 
 const execFileAsync = promisify(execFile);
 
@@ -252,7 +253,7 @@ async function renderTsMp4(
   }
 }
 
-export async function POST({ params, request }) {
+export const POST: RequestHandler = async ({ params, request }) => {
   if (process.env.VERCEL === '1') {
     throw error(403, 'MP4 generation is disabled on read-only deployments.');
   }
@@ -289,4 +290,4 @@ export async function POST({ params, request }) {
     request.url
   );
   return json(result);
-}
+};

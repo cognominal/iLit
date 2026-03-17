@@ -3,12 +3,13 @@ import { basename, resolve } from 'node:path';
 import { stat, writeFile } from 'node:fs/promises';
 import { findTsScene, findTsScript } from '$lib/ts-feature-sweep/catalog';
 import ts from 'typescript';
+import type { RequestHandler } from './$types';
 
 function repoRootFromCwd(cwd: string): string {
   return basename(cwd) === 'app' ? resolve(cwd, '..') : cwd;
 }
 
-export async function POST({ params, request }) {
+export const POST: RequestHandler = async ({ params, request }) => {
   const script = findTsScript(params.script);
   const scene = findTsScene(params.script, params.scene);
   if (!script || !scene) {
@@ -73,4 +74,4 @@ export async function POST({ params, request }) {
     path: targetPath,
     mtimeMs: after.mtimeMs,
   });
-}
+};

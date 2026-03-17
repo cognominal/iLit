@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { basename, resolve } from 'node:path';
 import { readFile, stat } from 'node:fs/promises';
+import type { RequestHandler } from './$types';
 
 function repoRootFromCwd(cwd: string): string {
   return basename(cwd) === 'app' ? resolve(cwd, '..') : cwd;
@@ -42,15 +43,15 @@ async function resolveMp4Path(
   return path;
 }
 
-export async function HEAD({ url, params }) {
+export const HEAD: RequestHandler = async ({ url, params }) => {
   await resolveMp4Path(url, params);
   return new Response(null, {
     status: 200,
     headers: { 'cache-control': 'no-store' }
   });
-}
+};
 
-export async function GET({ url, params }) {
+export const GET: RequestHandler = async ({ url, params }) => {
   const path = await resolveMp4Path(url, params);
   const bytes = await readFile(path);
   return new Response(bytes, {
@@ -60,4 +61,4 @@ export async function GET({ url, params }) {
       'cache-control': 'no-store'
     }
   });
-}
+};

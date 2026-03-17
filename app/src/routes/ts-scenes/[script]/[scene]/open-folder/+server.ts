@@ -2,10 +2,11 @@ import { error, json } from '@sveltejs/kit';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { findTsScene, findTsScript } from '$lib/ts-feature-sweep/catalog';
+import type { RequestHandler } from './$types';
 
 const execFileAsync = promisify(execFile);
 
-export async function POST({ params, request }) {
+export const POST: RequestHandler = async ({ params, request }) => {
   const script = findTsScript(params.script);
   const scene = findTsScene(params.script, params.scene);
   if (!script || !scene) {
@@ -25,4 +26,4 @@ export async function POST({ params, request }) {
     console.error('open TS sweep folder failed', cause);
     throw error(500, 'Could not open folder');
   }
-}
+};

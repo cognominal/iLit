@@ -7,6 +7,7 @@ import {
   DLXN_PY_SCENE_CLASS,
   DLXN_PY_SCRIPT_PATH,
 } from '$lib/dlxn/scenes/dlx3x2ThreeTiles';
+import type { RequestHandler } from './$types';
 
 type Profile = 'lowres' | 'medres' | 'hires';
 
@@ -65,7 +66,7 @@ async function findRenderedMp4(tempMediaDir: string): Promise<string> {
   return first;
 }
 
-export async function POST({ request }) {
+export const POST: RequestHandler = async ({ request }) => {
   if (process.env.VERCEL === '1') {
     throw error(403, 'MP4 generation is disabled on read-only deployments.');
   }
@@ -111,4 +112,4 @@ export async function POST({ request }) {
   } finally {
     await rm(tempMediaDir, { recursive: true, force: true });
   }
-}
+};

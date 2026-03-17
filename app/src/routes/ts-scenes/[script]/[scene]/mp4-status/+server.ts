@@ -5,6 +5,7 @@ import { findTsScene, findTsScript } from '$lib/ts-feature-sweep/catalog';
 import { scripts } from '$lib/feature-sweep/catalog';
 import { getTsRenderJob, tsRenderJobKey } from
   '$lib/ts-feature-sweep/render-jobs';
+import type { RequestHandler } from './$types';
 
 type Lang = 'ts' | 'py';
 type Profile = 'lowres' | 'medres' | 'hires';
@@ -62,7 +63,7 @@ async function safeMtimeMs(path: string): Promise<number | null> {
   }
 }
 
-export async function GET({ params, url }) {
+export const GET: RequestHandler = async ({ params, url }) => {
   const script = findTsScript(params.script);
   const scene = findTsScene(params.script, params.scene);
   if (!script || !scene) throw error(404, 'Unknown TS script/scene');
@@ -127,4 +128,4 @@ export async function GET({ params, url }) {
     renderStartedAtMs: renderJob?.startedAtMs ?? null,
     renderFinishedAtMs: renderJob?.finishedAtMs ?? null,
   });
-}
+};
