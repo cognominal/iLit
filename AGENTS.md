@@ -36,6 +36,9 @@
 ## Validation expectations
 
 - Run `bun run check` after Svelte/TypeScript changes.
+- Treat TypeScript diagnostics as blocking, including in Vite plugins and
+  TypeScript factory/compiler code. Fix signature mismatches rather than
+  leaving editor or type-check errors behind.
 - If tests are present, run the project test command before finishing.
 - Fix warnings rather than deferring them.
 - When a `.ts` scene is changed, regenerate/update its corresponding `.mp4`

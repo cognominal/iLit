@@ -71,74 +71,10 @@
       navigationMode: 'inactive' | 'goToLine';
     };
   };
-
-  const DOCUMENTED_DLL_SOURCE = `class DLNode {
-  public L: DLNode;
-  public R: DLNode;
-  public value: any;
-
-  constructor(value: any) {
-    this.value = value;
-    this.L = this;
-    this.R = this;
-  }
-}
-
-class DancingLinkedList {
-  private head: DLNode;
-
-  constructor(values: any[]) {
-    this.head = new DLNode("HEAD");
-    let current = this.head;
-
-    for (const val of values) {
-      const newNode = new DLNode(val);
-      newNode.L = current;
-      newNode.R = current.R;
-      current.R.L = newNode;
-      current.R = newNode;
-      current = newNode;
-    }
-  }
-
-  /**
-   * Knuth's Equation (1): Deleting a node.
-   * Note: The node X itself still points to its old neighbors!
-   */
-  public remove(x: DLNode): void {
-    x.R.L = x.L;
-    x.L.R = x.R;
-  }
-
-  /**
-   * Knuth's Equation (2): Restoring a node (Backtrack).
-   * This only works if restored in the exact reverse order of removal.
-   */
-  public restore(x: DLNode): void {
-    x.R.L = x;
-    x.L.R = x;
-  }
-
-  public toArray(): any[] {
-    const result = [];
-    let current = this.head.R;
-    while (current !== this.head) {
-      result.push(current.value);
-      current = current.R;
-    }
-    return result;
-  }
-
-  public getNodes(): DLNode[] {
-    const nodes = [];
-    let current = this.head.R;
-    while (current !== this.head) {
-      nodes.push(current);
-      current = current.R;
-    }
-    return nodes;
-  }
-}`;
+  const documentedSourceLoaders = import.meta.glob(
+    '/src/lib/ts-feature-sweep/ts/*.documented.ts',
+    { query: '?raw', import: 'default' }
+  ) as Record<string, () => Promise<string>>;
 
   let timeline = $state(createTimelineControllerState(6, FRAME_STEP_SEC));
   let exportingProfile = $state<null | 'lowres' | 'medres' | 'hires'>(null);
@@ -184,6 +120,10 @@ class DancingLinkedList {
   let sourceNavigationMode = $state<'inactive' | 'goToLine'>('goToLine');
   let pythonPaneOpen = $state(false);
   let documentedPaneOpen = $state(false);
+  let documentedSource = $state<string | null>(null);
+  let documentedSourceState = $state<
+    'idle' | 'loading' | 'ready' | 'missing' | 'error'
+  >('idle');
 
   let scene = $state<Scene | null>(null);
   let sceneResolved = $state(false);
@@ -206,10 +146,20 @@ class DancingLinkedList {
   const sourcePaneStorageKey = $derived(
     `ts-scene-source-pane:v1:${data.script.id}:${data.scene.id}`
   );
-  const supportsDocumentedPane = $derived(
-    data.script.id === 'doubly_linked_list_deletion' &&
-    data.scene.id === 'dll_delete'
+  const documentedSourcePath = $derived.by(() => {
+    const normalized = normalizePath(data.tsSourcePath);
+    const srcIndex = normalized.indexOf('/src/');
+    if (srcIndex < 0) return null;
+    return normalized
+      .slice(srcIndex)
+      .replace(/\.ts$/, '.documented.ts');
+  });
+  const documentedSourceLoader = $derived(
+    documentedSourcePath
+      ? (documentedSourceLoaders[documentedSourcePath] ?? null)
+      : null
   );
+  const supportsDocumentedPane = $derived(Boolean(documentedSourceLoader));
   let layoutRestoredKey = $state('');
   let mp4PrefsRestoredKey = $state('');
   let codeMirrorRestoredKey = $state('');
@@ -506,6 +456,25 @@ class DancingLinkedList {
     }));
   }
 
+  async function ensureDocumentedSourceLoaded(): Promise<void> {
+    if (!supportsDocumentedPane || !documentedSourceLoader) {
+      documentedSource = null;
+      documentedSourceState = 'missing';
+      return;
+    }
+    if (documentedSourceState === 'loading' || documentedSourceState === 'ready') {
+      return;
+    }
+    documentedSourceState = 'loading';
+    try {
+      documentedSource = await documentedSourceLoader();
+      documentedSourceState = 'ready';
+    } catch {
+      documentedSource = null;
+      documentedSourceState = 'error';
+    }
+  }
+
   $effect(() => {
     if (!browser || captureMode) return;
     document.documentElement.style.setProperty('--ts-left-pane', mainSplitPos);
@@ -538,6 +507,12 @@ class DancingLinkedList {
     supportsDocumentedPane;
     if (sourcePaneRestoredKey === sourcePaneStorageKey) return;
     restoreSourcePaneStateFromStorage();
+  });
+
+  $effect(() => {
+    documentedSourceLoader;
+    documentedSource = null;
+    documentedSourceState = supportsDocumentedPane ? 'idle' : 'missing';
   });
 
   $effect(() => {
@@ -582,6 +557,12 @@ class DancingLinkedList {
     };
     localStorage.setItem(sourcePaneStorageKey, JSON.stringify(payload));
     publishSourcePaneState();
+  });
+
+  $effect(() => {
+    if (!documentedPaneOpen) return;
+    if (!supportsDocumentedPane) return;
+    void ensureDocumentedSourceLoaded();
   });
 
   $effect(() => {
@@ -1444,14 +1425,41 @@ class DancingLinkedList {
                                 </button>
                               </div>
                             </div>
-                            {#key `documented:${data.script.id}:${data.scene.id}`}
-                              <ReadOnlyCodeMirror
-                                value={DOCUMENTED_DLL_SOURCE}
-                                language="typescript"
-                                testId="documented-code-editor"
-                                heightClass="h-full"
-                              />
-                            {/key}
+                            {#if documentedSourceState === 'loading'}
+                              <div
+                                class="flex h-full items-center justify-center rounded-lg
+                                border border-slate-700 bg-slate-900/60 text-sm
+                                text-slate-400"
+                              >
+                                Loading documented source...
+                              </div>
+                            {:else if documentedSourceState === 'ready' &&
+                              documentedSource}
+                              {#key `documented:${data.script.id}:${data.scene.id}`}
+                                <ReadOnlyCodeMirror
+                                  value={documentedSource}
+                                  language="typescript"
+                                  testId="documented-code-editor"
+                                  heightClass="h-full"
+                                />
+                              {/key}
+                            {:else if documentedSourceState === 'error'}
+                              <div
+                                class="flex h-full items-center justify-center rounded-lg
+                                border border-rose-800 bg-rose-950/30 text-sm
+                                text-rose-200"
+                              >
+                                Documented source failed to load.
+                              </div>
+                            {:else}
+                              <div
+                                class="flex h-full items-center justify-center rounded-lg
+                                border border-slate-700 bg-slate-900/60 text-sm
+                                text-slate-400"
+                              >
+                                No documented source available.
+                              </div>
+                            {/if}
                           </div>
                         {/snippet}
                       </SplitPane>
@@ -1729,14 +1737,41 @@ class DancingLinkedList {
                             </button>
                           </div>
                         </div>
-                        {#key `documented:${data.script.id}:${data.scene.id}`}
-                          <ReadOnlyCodeMirror
-                            value={DOCUMENTED_DLL_SOURCE}
-                            language="typescript"
-                            testId="documented-code-editor"
-                            heightClass="h-full"
-                          />
-                        {/key}
+                        {#if documentedSourceState === 'loading'}
+                          <div
+                            class="flex h-full items-center justify-center rounded-lg
+                            border border-slate-700 bg-slate-900/60 text-sm
+                            text-slate-400"
+                          >
+                            Loading documented source...
+                          </div>
+                        {:else if documentedSourceState === 'ready' &&
+                          documentedSource}
+                          {#key `documented:${data.script.id}:${data.scene.id}`}
+                            <ReadOnlyCodeMirror
+                              value={documentedSource}
+                              language="typescript"
+                              testId="documented-code-editor"
+                              heightClass="h-full"
+                            />
+                          {/key}
+                        {:else if documentedSourceState === 'error'}
+                          <div
+                            class="flex h-full items-center justify-center rounded-lg
+                            border border-rose-800 bg-rose-950/30 text-sm
+                            text-rose-200"
+                          >
+                            Documented source failed to load.
+                          </div>
+                        {:else}
+                          <div
+                            class="flex h-full items-center justify-center rounded-lg
+                            border border-slate-700 bg-slate-900/60 text-sm
+                            text-slate-400"
+                          >
+                            No documented source available.
+                          </div>
+                        {/if}
                       </div>
                     {/snippet}
                   </SplitPane>

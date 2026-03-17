@@ -60,7 +60,8 @@ function createAttachImport(factory: typeof ts.factory): ts.Statement {
         )
       ])
     ),
-    factory.createStringLiteral('$lib/manim-source')
+    factory.createStringLiteral('$lib/manim-source'),
+    undefined
   );
 }
 
